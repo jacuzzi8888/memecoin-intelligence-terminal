@@ -24,6 +24,7 @@
     "dev:ingest-sample": "pnpm --filter @memecoin/indexer ingest-sample",
     "dev:discover-tokens": "pnpm --filter @memecoin/indexer discover-tokens",
     "dev:ingest-wallet": "pnpm --filter @memecoin/indexer ingest-wallet --",
+    "dev:classify-wallet": "pnpm --filter @memecoin/indexer classify-wallet --",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
     "clean": "turbo run clean"
