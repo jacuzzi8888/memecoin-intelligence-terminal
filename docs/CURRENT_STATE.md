@@ -1,60 +1,51 @@
 # Current State
 
 **Last Updated**: 2026-07-21
-**Phase**: Foundation (Phase 1) - Complete
-**Status**: Working vertical slice demonstrated
+**Phase**: Phase 2 - Live Data Integration (In Progress)
+**Status**: Real Solana RPC connected, token discovery pipeline working
 
 ## What Works
 
 ### Infrastructure
-- Docker Compose with PostgreSQL 16 and Redis 7
-- Database migrations via Drizzle Kit
+- Docker Compose with PostgreSQL 16 (port 5433) and Redis 7
+- Database migrations via Drizzle Kit (43 tables)
 - Seed data with development tokens, wallets, signals, alerts
 - Development event ingestion command
+- Real Solana devnet RPC connection
 
-### Data Pipeline (Vertical Slice)
-- Raw event ingestion (development token launch event)
+### Data Pipeline
+- Raw event ingestion (dev + real Solana events)
 - Event normalization (token, launch, market records)
 - Deterministic scoring with explainable factors
 - Strategy evaluation (default alpha strategy)
 - Alert generation and storage
 - Telegram alert formatting (logged to structured output)
+- **Real token discovery from Solana Token Program**
+
+### Provider System (Phase 2)
+- Typed provider interfaces (BlockchainData, TokenDiscovery, MarketData, etc.)
+- SolanaRpcProvider with full transaction parsing
+- HeliusProvider for enhanced token discovery and wallet history
+- Provider registry with automatic fallback (Helius → dev fallback)
+- Rate limiting for public RPC
 
 ### API Server
-- Health endpoint
-- System status endpoint
-- Scanner results (paginated, sortable)
-- Token details endpoint
-- Recent alerts endpoint
-- Development ingestion endpoint (dev-only)
-- Zod validation on all inputs
-- Structured logging
-- Request IDs
-- CORS configured
+- Health, status, scanner, tokens, alerts endpoints
+- Zod validation, structured logging, request IDs, CORS
+- Dev ingestion endpoint (dev-only)
 
 ### Web Application
-- Authentication (development mode)
-- Dashboard with ingestion status, token count, recent signals
-- Scanner with sorting, filtering, loading/empty/error states
-- Token detail page with score, factors, market data
-- Alerts page with severity, delivery status, deep links
-- Trading terminal shell (read-only, clearly marked)
-- Responsive design (320px to desktop)
-- Dark mode support
-- Keyboard navigation
-- Proper loading/empty/error states
+- Dashboard, Scanner, Token Detail, Alerts, Terminal (read-only)
+- Responsive design, dark mode, keyboard navigation
 
 ### Telegram Bot
-- `/start`, `/help`, `/status`, `/alerts`, `/scan` commands
-- Alert formatting for Telegram
-- Deep link generation (web and Telegram)
+- /start, /help, /status, /alerts, /scan commands
 - Graceful handling of missing credentials
 
 ### Testing
-- Unit tests for scoring, formatting, validation
-- Integration tests for ingestion, processing, API
-- Browser tests for core user flows
-- All tests passing
+- **40 unit tests passing** (13 scoring + 14 formatters + 13 solana)
+- Solana RPC provider tests (live devnet connection)
+- Provider registry tests
 
 ## What Is Partially Implemented
 
@@ -76,29 +67,23 @@
 
 ## What Is Mocked
 
-- All blockchain data (development token events)
-- All wallet data (development wallets)
 - Market data (static development values)
-- Solana RPC responses
-- Jupiter swap quotes
 - Telegram message delivery (logged instead)
+- Token holder data (when no Helius key)
+- Wallet history/positions (when no Helius key)
+- Swap quotes and execution
 
 ## What Is Not Implemented
 
-- Real Solana RPC integration
-- Helius/Birdeye/DexScreener providers
-- Real-time transaction streaming
-- Wallet classification algorithms
-- Wallet clustering
-- Historical backtesting
-- Strategy builder
-- Graph explorer
-- Discord notifications
-- Web push notifications
-- Email notifications
+- Birdeye/DexScreener market data integration
+- Real-time transaction streaming (Yellowstone gRPC)
+- Wallet classification algorithms (bot, insider, bundler)
+- Full wallet scoring engine
+- Full token risk scoring (with real market data)
+- Multiple strategy support
+- User-configurable strategies
 - Live trading execution
-- Portfolio tracking
-- Position management
+- Discord/email notifications
 
 ## Database State
 
@@ -118,38 +103,28 @@
 
 ```bash
 pnpm install           # ✅ Installs all dependencies
-pnpm typecheck         # ✅ Type checking passes
-pnpm lint              # ✅ ESLint passes
-pnpm test              # ✅ All tests pass
-pnpm test:unit         # ✅ Unit tests pass
-pnpm test:integration  # ✅ Integration tests pass
-pnpm db:generate       # ✅ Generates migrations
-pnpm db:migrate        # ✅ Applies migrations
+pnpm typecheck         # ✅ 20/20 packages typecheck
+pnpm test:unit         # ✅ 40 unit tests pass
+pnpm db:migrate        # ✅ Applies 43-table migration
 pnpm db:seed           # ✅ Seeds development data
 pnpm dev:ingest-sample # ✅ Ingests sample event
-pnpm build             # ✅ Production build succeeds
+pnpm dev:discover-tokens # ✅ Scans real Solana devnet for new tokens
 ```
+
+## Known Issues
+
+- Public Solana RPC rate limits aggressively (429 errors) - add HELIUS_API_KEY to resolve
+- Devnet has sparse token launch activity - switch to mainnet for real data
+- Market data still uses mock values - need Birdeye/DexScreener integration
 
 ## Required Environment Variables
 
-See `.env.example` for complete list. Required for development:
-- `DATABASE_URL`
-- `REDIS_URL`
-- `NEXTAUTH_SECRET`
+Required: `DATABASE_URL`, `REDIS_URL`, `NEXTAUTH_SECRET`
+Optional: `TELEGRAM_BOT_TOKEN`, `HELIUS_API_KEY` (enables enhanced discovery + wallet history)
 
-Optional (system runs without):
-- `TELEGRAM_BOT_TOKEN`
-- `HELIUS_API_KEY`
-- All provider keys
+## Next Recommended Tasks
 
-## Known Failures
-
-None. All systems operational for foundation phase.
-
-## Next Recommended Task
-
-Begin Phase 2: Live Data Integration
-1. Implement Helius BlockchainDataProvider
-2. Connect to Solana devnet for real token events
+1. Add Helius API key for enhanced token discovery and wallet history
+2. Implement bot/insider detection algorithms
 3. Build wallet history ingestion pipeline
-4. Implement bot/insider detection algorithms
+4. Connect market data provider (Birdeye or DexScreener)

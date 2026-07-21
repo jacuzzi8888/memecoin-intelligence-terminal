@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "ingest-sample": "tsx src/commands/ingest-sample.ts",
+    "discover-tokens": "tsx src/commands/discover-tokens.ts",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {

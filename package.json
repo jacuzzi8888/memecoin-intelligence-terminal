@@ -22,6 +22,7 @@
     "db:seed": "pnpm --filter @memecoin/database seed",
     "db:studio": "pnpm --filter @memecoin/database studio",
     "dev:ingest-sample": "pnpm --filter @memecoin/indexer ingest-sample",
+    "dev:discover-tokens": "pnpm --filter @memecoin/indexer discover-tokens",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
     "clean": "turbo run clean"
