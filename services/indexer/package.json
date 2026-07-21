@@ -14,6 +14,7 @@
     "test:unit": "vitest run",
     "ingest-sample": "tsx src/commands/ingest-sample.ts",
     "discover-tokens": "tsx src/commands/discover-tokens.ts",
+    "ingest-wallet": "tsx src/commands/ingest-wallet.ts",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
