@@ -32,23 +32,78 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
 
   async getNewTokens(since: Date): Promise<TokenEvent[]> {
     try {
-      const url = `${this.baseUrl}/tokens/new?api-key=${this.apiKey}&since=${Math.floor(since.getTime() / 1000)}`;
-      const response = await fetch(url);
+      const response = await fetch(this.rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "new-tokens",
+          method: "getSignaturesForAddress",
+          params: [
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            { limit: 50, until: undefined },
+          ],
+        }),
+      });
+
       if (!response.ok) {
-        log.error({ status: response.status }, "Helius getNewTokens failed");
+        log.error({ status: response.status }, "Helius getSignaturesForAddress failed");
         return [];
       }
 
-      const data = (await response.json()) as any[];
-      return data.map((item) => ({
-        type: "token_launch" as const,
-        tokenAddress: item.tokenAccount || item.mint || "",
-        deployer: item.payer || item.owner || "",
-        timestamp: item.timestamp || Math.floor(Date.now() / 1000),
-        slot: item.slot || 0,
-        signature: item.signature || "",
-        metadata: item,
-      }));
+      const data = (await response.json()) as any;
+      const signatures = data.result || [];
+      const events: TokenEvent[] = [];
+
+      for (const sig of signatures.slice(0, 10)) {
+        if (sig.blockTime && sig.blockTime * 1000 < since.getTime()) continue;
+
+        try {
+          const txResponse = await fetch(this.rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: "tx",
+              method: "getTransaction",
+              params: [
+                sig.signature,
+                { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 },
+              ],
+            }),
+          });
+
+          const txData = (await txResponse.json()) as any;
+          const tx = txData.result;
+          if (!tx || tx.meta?.err) continue;
+
+          const instructions = tx.transaction?.message?.instructions || [];
+          for (const ix of instructions) {
+            if (ix.program !== "spl-token" && ix.program !== "spl-token-2022") continue;
+            if (ix.parsed?.type !== "initializeMint" && ix.parsed?.type !== "initializeMint2") continue;
+
+            const mint = ix.parsed?.info?.mint;
+            const decimals = ix.parsed?.info?.decimals;
+            const mintAuthority = ix.parsed?.info?.mintAuthority;
+
+            if (mint) {
+              events.push({
+                type: "token_launch",
+                tokenAddress: mint,
+                deployer: mintAuthority || "",
+                timestamp: tx.blockTime || Math.floor(Date.now() / 1000),
+                slot: tx.slot || 0,
+                signature: sig.signature,
+                metadata: { decimals, source: "helius" },
+              });
+            }
+          }
+        } catch (err) {
+          log.debug({ error: err, signature: sig.signature }, "Failed to parse transaction");
+        }
+      }
+
+      return events;
     } catch (err) {
       log.error({ error: err }, "Failed to get new tokens from Helius");
       return [];
@@ -200,15 +255,23 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
   async health(): Promise<ProviderHealth> {
     try {
       const start = Date.now();
-      const response = await fetch(
-        `${this.baseUrl}/health?api-key=${this.apiKey}`,
-      );
-      const healthy = response.ok;
+      const response = await fetch(this.rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "health",
+          method: "getSlot",
+          params: [],
+        }),
+      });
+      const data = (await response.json()) as any;
+      const healthy = !!data.result;
       return {
         provider: this.name,
         healthy,
         latencyMs: Date.now() - start,
-        error: healthy ? undefined : "Helius API unhealthy",
+        error: healthy ? undefined : "Helius RPC returned no result",
       };
     } catch (err) {
       return {
