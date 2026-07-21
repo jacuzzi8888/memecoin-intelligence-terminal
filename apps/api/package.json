@@ -1,0 +1,40 @@
+{
+  "name": "@memecoin/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/rate-limit": "^10.2.0",
+    "@fastify/websocket": "^11.0.0",
+    "@fastify/swagger": "^9.4.0",
+    "zod": "^3.24.0",
+    "@fastify/type-provider-typebox": "^5.1.0",
+    "@memecoin/config": "workspace:*",
+    "@memecoin/logger": "workspace:*",
+    "@memecoin/database": "workspace:*",
+    "@memecoin/schemas": "workspace:*",
+    "@memecoin/intelligence": "workspace:*",
+    "@memecoin/notifications": "workspace:*",
+    "@memecoin/queue": "workspace:*",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  }
+}

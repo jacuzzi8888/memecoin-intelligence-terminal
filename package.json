@@ -1,0 +1,35 @@
+{
+  "name": "memecoin-intelligence-terminal",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Solana Memecoin Intelligence Scanner and Trading Terminal",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "db:generate": "pnpm --filter @memecoin/database generate",
+    "db:migrate": "pnpm --filter @memecoin/database migrate",
+    "db:seed": "pnpm --filter @memecoin/database seed",
+    "db:studio": "pnpm --filter @memecoin/database studio",
+    "dev:ingest-sample": "pnpm --filter @memecoin/indexer ingest-sample",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}
