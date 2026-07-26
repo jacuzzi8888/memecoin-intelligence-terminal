@@ -6,6 +6,8 @@ describe("ProviderRegistry", () => {
     const registry = createProviderRegistry({});
     expect(registry.blockchain.name).toBe("solana-rpc");
     expect(registry.tokenDiscovery.name).toBe("dev-token-discovery");
+    expect(registry.marketData.name).toBe("dexscreener");
+    expect(registry.transactionStream.name).toBe("dev-transaction-stream");
     expect(registry.walletHistory.name).toBe("dev-wallet-history");
   });
 
@@ -13,7 +15,13 @@ describe("ProviderRegistry", () => {
     const registry = createProviderRegistry({ heliusApiKey: "test-key" });
     expect(registry.blockchain.name).toBe("solana-rpc");
     expect(registry.tokenDiscovery.name).toBe("helius");
+    expect(registry.transactionStream.name).toBe("helius-stream");
     expect(registry.walletHistory.name).toBe("helius");
+  });
+
+  it("uses Birdeye market data when API key provided", () => {
+    const registry = createProviderRegistry({ birdeyeApiKey: "bird-key" });
+    expect(registry.marketData.name).toBe("birdeye");
   });
 
   it("uses custom RPC URL when provided", () => {
@@ -27,10 +35,17 @@ describe("ProviderRegistry", () => {
     expect(result).toBeNull();
   });
 
-  it("dev fallback returns null for unknown get methods", async () => {
+  it("dev fallback returns empty arrays for list-returning methods", async () => {
     const registry = createProviderRegistry({});
     const result = await registry.tokenDiscovery.getNewTokens(new Date());
-    expect(result).toBeNull();
+    expect(result).toEqual([]);
+  });
+
+  it("dev stream fallback returns a subscription object", async () => {
+    const registry = createProviderRegistry({});
+    const subscription = await registry.transactionStream.subscribe({});
+    expect(subscription.subscriptionId).toBe("dev-dev-transaction-stream");
+    await expect(subscription.unsubscribe()).resolves.toBeUndefined();
   });
 
   it("dev fallback reports unhealthy", async () => {

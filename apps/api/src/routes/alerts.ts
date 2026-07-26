@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 const querySchema = z.object({
   limit: z.coerce.number().min(1).max(50).default(20),
@@ -27,7 +27,7 @@ export const alertsRoute: FastifyPluginAsync = async (app) => {
       strategyName: schema.strategies.name,
     })
       .from(schema.alerts)
-      .leftJoin(schema.strategies, sql`1=1`)
+      .leftJoin(schema.strategies, eq(schema.alerts.strategyId, schema.strategies.id))
       .orderBy(desc(schema.alerts.triggeredAt))
       .limit(query.limit);
 
@@ -51,5 +51,3 @@ export const alertsRoute: FastifyPluginAsync = async (app) => {
     };
   });
 };
-
-import { sql } from "drizzle-orm";

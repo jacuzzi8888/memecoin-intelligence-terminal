@@ -1,130 +1,105 @@
 # Current State
 
-**Last Updated**: 2026-07-21
+**Last Updated**: 2026-07-25
 **Phase**: Phase 2 - Live Data Integration (In Progress)
-**Status**: Real Solana RPC connected, token discovery pipeline working
+**Status**: Core monorepo is operational, live provider plumbing exists, and the product is still a mixed seeded-data plus incremental live-data build.
 
 ## What Works
 
 ### Infrastructure
-- Docker Compose with PostgreSQL 16 (port 5433) and Redis 7
-- Database migrations via Drizzle Kit (43 tables)
-- Seed data with development tokens, wallets, signals, alerts
-- Development event ingestion command
-- Real Solana devnet RPC connection
+- Docker Compose for PostgreSQL 16 on port 5433 and Redis 7
+- Drizzle migrations and development seeding
+- Turborepo and pnpm workspace scripts
+- Repo-wide typechecking across all 20 packages
+- Repo-wide unit test command now completes without failing on packages that do not yet define local test files
 
-### Data Pipeline
-- Raw event ingestion (dev + real Solana events)
-- Event normalization (token, launch, market records)
-- Deterministic scoring with explainable factors
-- Strategy evaluation (default alpha strategy)
-- Alert generation and storage
-- Telegram alert formatting (logged to structured output)
-- **Real token discovery from Solana Token Program**
+### API and Data Access
+- Fastify API server with health, status, scanner, token, alerts, and dev ingest routes
+- Zod validation, CORS, request IDs, and structured logging
+- Database-backed dashboard and API responses for seeded development data
+- Alerts route now joins strategies through the actual foreign key
 
-### Provider System (Phase 2)
-- Typed provider interfaces (BlockchainData, TokenDiscovery, MarketData, etc.)
-- SolanaRpcProvider with full transaction parsing
-- HeliusProvider for enhanced token discovery and wallet history
-- Provider registry with automatic fallback (Helius → dev fallback)
-- Rate limiting for public RPC
+### Provider Layer
+- Solana RPC provider with transaction parsing
+- Helius provider wiring for token discovery and wallet history when `HELIUS_API_KEY` is set
+- DexScreener market data provider available by default
+- Birdeye market data provider available when `BIRDEYE_API_KEY` is set
+- Provider registry fallback logic for missing paid-provider credentials
 
-### API Server
-- Health, status, scanner, tokens, alerts endpoints
-- Zod validation, structured logging, request IDs, CORS
-- Dev ingestion endpoint (dev-only)
+### Intelligence Logic
+- Deterministic token scoring with explainable factor output
+- Wallet classification heuristics for bot, insider, bundler, sniper, whale, and related labels
+- Unit tests for scoring, notification formatting, and Solana provider behavior
 
-### Web Application
-- Dashboard, Scanner, Token Detail, Alerts, Terminal (read-only)
-- Responsive design, dark mode, keyboard navigation
-
-### Telegram Bot
-- /start, /help, /status, /alerts, /scan commands
-- Graceful handling of missing credentials
-
-### Testing
-- **40 unit tests passing** (13 scoring + 14 formatters + 13 solana)
-- Solana RPC provider tests (live devnet connection)
-- Provider registry tests
+### Product Surfaces
+- Next.js web app with dashboard, scanner, alerts, token detail, watchlists, wallets, settings, and terminal routes
+- Telegram bot commands for `/start`, `/help`, `/status`, `/alerts`, and `/scan`
+- Development ingestion commands for sample events, token discovery, wallet ingestion, and wallet classification
 
 ## What Is Partially Implemented
 
-### Authentication
-- Development login works (no external OAuth)
-- Session handling works
-- Production auth (Google, GitHub) not configured
+### Live Data Coverage
+- Real provider integrations exist, but not every product surface consumes live market or wallet-history data end to end
+- Seed data is still the main source for the default dashboard and demo flows
+- Helius-enhanced discovery and wallet history depend on optional credentials
 
-### Trading Terminal
-- UI shell exists with all form elements
-- No actual quote retrieval
-- No wallet connection
-- Clearly labeled "Execution Unavailable"
+### Trading
+- Trading terminal UI shell exists
+- Swap quote and execution providers still use development fallbacks
+- No wallet connection or transaction submission flow is enabled
 
 ### Notifications
-- Telegram formatting works
-- No actual delivery (credentials not configured)
-- Discord, web push, email not implemented
+- Telegram formatting is implemented
+- Bot startup is credential-gated and alert delivery infrastructure is minimal
+- Discord, email, web push, and WhatsApp are not implemented
 
-## What Is Mocked
+### Workers and Background Processing
+- Indexer commands exist and raw provider events can be stored
+- The dedicated alerts service is still mostly a stub
+- End-to-end queue-driven background orchestration is not complete
 
-- Market data (static development values)
-- Telegram message delivery (logged instead)
-- Token holder data (when no Helius key)
-- Wallet history/positions (when no Helius key)
-- Swap quotes and execution
+## What Is Still Seeded or Stubbed
 
-## What Is Not Implemented
+- Default dashboard metrics and demo flows rely on seeded database records
+- Telegram delivery is limited by missing credentials in local development
+- Swap quotes and execution are stubbed
+- Some wallet and holder enrichment paths fall back to development behavior when provider credentials are missing
 
-- Birdeye/DexScreener market data integration
-- Real-time transaction streaming (Yellowstone gRPC)
-- Wallet classification algorithms (bot, insider, bundler)
-- Full wallet scoring engine
-- Full token risk scoring (with real market data)
-- Multiple strategy support
-- User-configurable strategies
-- Live trading execution
-- Discord/email notifications
-
-## Database State
-
-- 24 tables created
-- All migrations applied
-- Seed data includes:
-  - 1 system user + 1 admin user
-  - 5 development tokens
-  - 5 development wallets
-  - 2 strategies
-  - 5 signals with factors
-  - 5 alerts with deliveries
-  - 5 markets with snapshots
-  - Raw provider events for vertical slice
-
-## Commands That Pass
+## Validation Snapshot
 
 ```bash
-pnpm install           # ✅ Installs all dependencies
-pnpm typecheck         # ✅ 20/20 packages typecheck
-pnpm test:unit         # ✅ 40 unit tests pass
-pnpm db:migrate        # ✅ Applies 43-table migration
-pnpm db:seed           # ✅ Seeds development data
-pnpm dev:ingest-sample # ✅ Ingests sample event
-pnpm dev:discover-tokens # ✅ Scans real Solana devnet for new tokens
+pnpm typecheck   # passes across 20 packages
+pnpm test:unit   # passes; packages without local tests no longer fail the workspace run
 ```
 
-## Known Issues
+Implemented unit tests currently cover:
+- intelligence scoring
+- notification formatters
+- Solana providers and registry behavior
 
-- Public Solana RPC rate limits aggressively (429 errors) - add HELIUS_API_KEY to resolve
-- Devnet has sparse token launch activity - switch to mainnet for real data
-- Market data still uses mock values - need Birdeye/DexScreener integration
+## Known Gaps
+
+- No live trading execution
+- No complete wallet-history ingestion pipeline
+- No fully productionized alert delivery pipeline
+- No full real-time transaction streaming workflow wired into the product
+- No production auth provider configuration
 
 ## Required Environment Variables
 
-Required: `DATABASE_URL`, `REDIS_URL`, `NEXTAUTH_SECRET`
-Optional: `TELEGRAM_BOT_TOKEN`, `HELIUS_API_KEY` (enables enhanced discovery + wallet history)
+Required:
+- `DATABASE_URL`
+- `REDIS_URL`
+- `NEXTAUTH_SECRET`
+
+Optional:
+- `TELEGRAM_BOT_TOKEN`
+- `HELIUS_API_KEY`
+- `BIRDEYE_API_KEY`
 
 ## Next Recommended Tasks
 
-1. Add Helius API key for enhanced token discovery and wallet history
-2. Implement bot/insider detection algorithms
-3. Build wallet history ingestion pipeline
-4. Connect market data provider (Birdeye or DexScreener)
+1. Wire live provider output into the scanner, token detail, and dashboard surfaces consistently.
+2. Finish the background pipeline so indexer, processor, scoring, and alerts run end to end outside demo commands.
+3. Implement real quote retrieval and execution for the trading terminal.
+4. Expand test coverage beyond the current intelligence, notification, and provider packages.

@@ -161,4 +161,8 @@ export class SolanaRpcProvider implements IBlockchainDataProvider {
   getConnection(): Connection {
     return this.connection;
   }
+
+  getRpcUrl(): string {
+    return this.connection.rpcEndpoint;
+  }
 }

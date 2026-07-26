@@ -1,6 +1,9 @@
 import type { IProviderRegistry } from "../interfaces.js";
 import { SolanaRpcProvider } from "./solana-rpc.js";
 import { HeliusProvider } from "./helius.js";
+import { DexScreenerProvider } from "./dexscreener.js";
+import { BirdeyeProvider } from "./birdeye.js";
+import { HeliusStreamProvider } from "./helius-stream.js";
 import { logger } from "@memecoin/logger";
 
 const log = logger("provider-registry");
@@ -8,7 +11,12 @@ const log = logger("provider-registry");
 export interface ProviderConfig {
   solanaRpcUrl?: string;
   heliusApiKey?: string;
+  birdeyeApiKey?: string;
   enablePaidProviders?: boolean;
+}
+
+async function* createEmptyStream() {
+  // Empty async iterable used by local development fallbacks.
 }
 
 function createDevFallback(name: string): any {
@@ -19,12 +27,43 @@ function createDevFallback(name: string): any {
       if (prop === "isConnected") return () => false;
       if (prop === "getConnection") return () => null;
       if (prop === "getRpcUrl") return () => "";
-      if (prop === "subscribe") return async function* () { /* empty */ };
-      if (prop === "unsubscribe") return async () => {};
-      if (typeof prop === "string" && prop.startsWith("get")) {
-        return async () => (name.includes("List") || name.includes("Trades") || name.includes("Positions") || name.includes("Holders") || name.includes("Pools") || name.includes("Multiple") || name.includes("History") || name.includes("Quotes") || name.includes("Prices") ? [] : null);
+      if (prop === "subscribe") {
+        return async () => ({
+          subscriptionId: `dev-${name}`,
+          unsubscribe: async () => {},
+          [Symbol.asyncIterator]: () => createEmptyStream(),
+        });
       }
-      if (typeof prop === "string" && (prop.startsWith("build") || prop.startsWith("simulate") || prop.startsWith("send"))) {
+      if (prop === "unsubscribe") return async () => {};
+      if (prop === "getNewTokens") return async () => [];
+      if (prop === "getTokenInfo") return async () => null;
+      if (prop === "getTokenHolders") return async () => [];
+      if (prop === "getTokenPrice") return async () => null;
+      if (prop === "getMarketData") return async () => null;
+      if (prop === "getHistoricalPrices") return async () => [];
+      if (prop === "getPoolsForToken") return async () => [];
+      if (prop === "getWalletTrades") return async () => [];
+      if (prop === "getWalletPositions") return async () => [];
+      if (prop === "getWalletPnl") {
+        return async () => ({
+          totalPnlUsd: 0,
+          realizedPnlUsd: 0,
+          unrealizedPnlUsd: 0,
+          winRate: 0,
+          totalTrades: 0,
+        });
+      }
+      if (prop === "getQuote") return async () => null;
+      if (prop === "getQuotes") return async () => [];
+      if (prop === "buildSwapTransaction") return async () => null;
+      if (prop === "simulateSwap") {
+        return async () => ({
+          success: false,
+          error: "Not implemented",
+          logs: [],
+        });
+      }
+      if (typeof prop === "string" && prop.startsWith("send")) {
         return async () => null;
       }
       return undefined;
@@ -60,8 +99,24 @@ export function createProviderRegistry(config: ProviderConfig = {}): IProviderRe
     log.info("Using development fallback for token discovery and wallet history");
   }
 
-  const marketData = createDevFallback("dev-market-data");
-  const transactionStream = createDevFallback("dev-transaction-stream");
+  let marketData: any;
+  const birdeyeApiKey = config.birdeyeApiKey || process.env.BIRDEYE_API_KEY;
+
+  if (birdeyeApiKey) {
+    marketData = new BirdeyeProvider({ apiKey: birdeyeApiKey });
+    log.info("Using Birdeye for market data");
+  } else {
+    marketData = new DexScreenerProvider();
+    log.info("Using DexScreener for market data (free tier)");
+  }
+
+  let transactionStream: any;
+  if (useHelius) {
+    transactionStream = new HeliusStreamProvider({ apiKey: config.heliusApiKey || process.env.HELIUS_API_KEY || "" });
+    log.info("Using Helius WebSocket for transaction streaming");
+  } else {
+    transactionStream = createDevFallback("dev-transaction-stream");
+  }
   const swapQuote = createDevFallback("dev-swap-quote");
   const swapExecution = createDevFallback("dev-swap-execution");
 
@@ -78,3 +133,6 @@ export function createProviderRegistry(config: ProviderConfig = {}): IProviderRe
 
 export { SolanaRpcProvider } from "./solana-rpc.js";
 export { HeliusProvider } from "./helius.js";
+export { DexScreenerProvider } from "./dexscreener.js";
+export { BirdeyeProvider } from "./birdeye.js";
+export { HeliusStreamProvider } from "./helius-stream.js";

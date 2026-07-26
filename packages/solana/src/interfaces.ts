@@ -1,3 +1,4 @@
+import type { Connection } from "@solana/web3.js";
 import type {
   TransactionData,
   AccountInfo,
@@ -28,6 +29,8 @@ export interface IBlockchainDataProvider {
   getProgramAccounts(programId: string, filters?: { memcmp?: { offset: number; bytes: string } }[]): Promise<ProgramAccount[]>;
   getLatestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }>;
   health(): Promise<ProviderHealth>;
+  getConnection(): Connection;
+  getRpcUrl?(): string;
 }
 
 export interface ITokenDiscoveryProvider {
@@ -47,9 +50,14 @@ export interface IMarketDataProvider {
   health(): Promise<ProviderHealth>;
 }
 
+export interface StreamSubscription extends AsyncIterable<StreamEvent> {
+  readonly subscriptionId: string;
+  unsubscribe(): Promise<void>;
+}
+
 export interface ITransactionStreamProvider {
   readonly name: string;
-  subscribe(config: StreamConfig): AsyncIterable<StreamEvent>;
+  subscribe(config: StreamConfig): Promise<StreamSubscription>;
   unsubscribe(subscriptionId: string): Promise<void>;
   isConnected(): boolean;
   health(): Promise<ProviderHealth>;

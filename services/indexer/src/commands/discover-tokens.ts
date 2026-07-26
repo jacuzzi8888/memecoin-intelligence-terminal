@@ -7,8 +7,8 @@ import { randomUUID } from "crypto";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
 import { calculateSignalScore } from "@memecoin/intelligence";
-import { formatDevLogAlert, generateDeepLinks } from "@memecoin/notifications";
-import { SolanaRpcProvider, HeliusProvider } from "@memecoin/solana";
+import { generateDeepLinks } from "@memecoin/notifications";
+import { createProviderRegistry, type TokenInfo } from "@memecoin/solana";
 import { logger } from "@memecoin/logger";
 import { eq } from "drizzle-orm";
 
@@ -26,10 +26,16 @@ async function main() {
     ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
     : process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 
-  const solanaRpc = new SolanaRpcProvider(rpcUrl);
-  const helius = useHelius ? new HeliusProvider({ apiKey: heliusApiKey! }) : null;
+  const providers = createProviderRegistry({
+    solanaRpcUrl: rpcUrl,
+    heliusApiKey,
+    birdeyeApiKey: process.env.BIRDEYE_API_KEY,
+  });
 
-  const health = await solanaRpc.health();
+  const marketHealth = await providers.marketData.health();
+  log.info({ marketHealth, provider: providers.marketData.name }, "Market data health check");
+
+  const health = await providers.blockchain.health();
   log.info({ health, network: isMainnet ? "mainnet" : "devnet", helius: useHelius }, "RPC health check");
 
   if (!health.healthy) {
@@ -37,9 +43,9 @@ async function main() {
     return;
   }
 
-  if (helius) {
-    const heliusHealth = await helius.health();
-    log.info({ heliusHealth }, "Helius health check");
+  if (useHelius) {
+    const discoveryHealth = await providers.tokenDiscovery.health();
+    log.info({ discoveryHealth, provider: providers.tokenDiscovery.name }, "Token discovery health check");
   }
 
   log.info({ network: isMainnet ? "mainnet" : "devnet" }, "Scanning for new tokens...");
@@ -51,16 +57,17 @@ async function main() {
     slot: number;
     signature: string;
     decimals: number;
+    tokenInfo: TokenInfo | null;
   }> = [];
 
-  if (helius) {
-    log.info("Using Helius enhanced API for token discovery...");
+  if (useHelius) {
+    log.info({ provider: providers.tokenDiscovery.name }, "Using registry-backed token discovery...");
     const since = new Date(Date.now() - 3600_000);
-    const heliusTokens = await helius.getNewTokens(since);
-    log.info({ count: heliusTokens.length }, "Helius returned token events");
+    const discoveredTokens = await providers.tokenDiscovery.getNewTokens(since);
+    log.info({ count: discoveredTokens.length }, "Registry token discovery returned token events");
 
-    for (const evt of heliusTokens) {
-      const info = await helius.getTokenInfo(evt.tokenAddress);
+    for (const evt of discoveredTokens) {
+      const info = await providers.tokenDiscovery.getTokenInfo(evt.tokenAddress);
       tokenEvents.push({
         tokenAddress: evt.tokenAddress,
         deployer: evt.deployer,
@@ -68,13 +75,14 @@ async function main() {
         slot: evt.slot,
         signature: evt.signature,
         decimals: info?.decimals || 9,
+        tokenInfo: info,
       });
     }
   }
 
   if (tokenEvents.length === 0) {
     log.info("No tokens from Helius, falling back to RPC scan...");
-    const connection = solanaRpc.getConnection();
+    const connection = providers.blockchain.getConnection();
     const { PublicKey } = await import("@solana/web3.js");
     const TOKEN_PROGRAM = isMainnet
       ? "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -125,6 +133,7 @@ async function main() {
             slot: tx.slot,
             signature: sigInfo.signature,
             decimals: decimals ?? 9,
+            tokenInfo: null,
           });
         }
       } catch (err) {
@@ -154,19 +163,16 @@ async function main() {
       tokensFound++;
 
       let tokenMeta = { symbol: "NEW", name: `Token ${evt.tokenAddress.slice(0, 8)}` };
-      if (helius) {
-        const info = await helius.getTokenInfo(evt.tokenAddress);
-        if (info) {
-          tokenMeta = { symbol: info.symbol, name: info.name };
-        }
+      if (evt.tokenInfo) {
+        tokenMeta = { symbol: evt.tokenInfo.symbol, name: evt.tokenInfo.name };
       }
 
-      const tokenId = randomUUID();
+      const candidateTokenId = randomUUID();
       const rawEventId = randomUUID();
 
       await db.insert(schema.rawProviderEvents).values({
         id: rawEventId,
-        provider: helius ? "helius" : "solana-rpc",
+        provider: useHelius ? providers.tokenDiscovery.name : "solana-rpc",
         eventType: "token_launch",
         rawJson: evt as unknown as Record<string, unknown>,
         txSignature: evt.signature,
@@ -176,7 +182,7 @@ async function main() {
       });
 
       await db.insert(schema.tokens).values({
-        id: tokenId,
+        id: candidateTokenId,
         address: evt.tokenAddress,
         symbol: tokenMeta.symbol,
         name: tokenMeta.name,
@@ -184,6 +190,20 @@ async function main() {
         totalSupply: "0",
         firstSeenAt: new Date(evt.timestamp * 1000),
       }).onConflictDoNothing();
+
+      const persistedTokenRows = await db
+        .select({ id: schema.tokens.id })
+        .from(schema.tokens)
+        .where(eq(schema.tokens.address, evt.tokenAddress))
+        .limit(1);
+      const persistedToken = persistedTokenRows[0];
+
+      if (!persistedToken) {
+        log.error({ tokenAddress: evt.tokenAddress }, "Token row was not persisted");
+        continue;
+      }
+
+      const tokenId = persistedToken.id;
 
       await db.insert(schema.tokenLaunches).values({
         id: randomUUID(),
@@ -197,12 +217,42 @@ async function main() {
         slot: String(evt.slot),
       }).onConflictDoNothing();
 
+      const marketData = await providers.marketData.getMarketData(evt.tokenAddress);
+      const now = Math.floor(Date.now() / 1000);
+      const tokenAgeMinutes = Math.max(1, Math.floor((now - evt.timestamp) / 60));
+
+      log.info(
+        { tokenAddress: evt.tokenAddress, hasMarketData: !!marketData, provider: providers.marketData.name },
+        "Fetched market data",
+      );
+
+      if (marketData) {
+        try {
+          await db.insert(schema.tokenSnapshots).values({
+            id: randomUUID(),
+            tokenId,
+            tokenAddress: evt.tokenAddress,
+            marketCapUsd: String(marketData.marketCapUsd),
+            priceUsd: String(marketData.priceUsd),
+            volume1hUsd: String(marketData.volume1hUsd),
+            volume24hUsd: String(marketData.volume24hUsd),
+            liquidityUsd: String(marketData.liquidityUsd),
+            holderCount: marketData.holderCount || null,
+            priceChange1h: String(marketData.priceChange1h),
+            priceChange24h: String(marketData.priceChange24h),
+            snapshotAt: new Date(),
+          });
+        } catch (err) {
+          log.debug({ error: err }, "Failed to insert token snapshot");
+        }
+      }
+
       const scoreResult = calculateSignalScore({
-        tokenAge: 1,
-        liquidityUsd: null,
-        volume1hUsd: null,
-        holderCount: 0,
-        qualifiedWalletCount: 0,
+        tokenAge: tokenAgeMinutes,
+        liquidityUsd: marketData?.liquidityUsd ?? null,
+        volume1hUsd: marketData?.volume1hUsd ?? null,
+        holderCount: marketData?.holderCount || null,
+        qualifiedWalletCount: null,
         bundledSupplyPct: null,
         deployerRisk: null,
         topHolderConcentration: null,
