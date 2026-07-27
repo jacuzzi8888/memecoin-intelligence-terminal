@@ -2,6 +2,71 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-07-27
+
+### Added
+
+#### Runtime and Automation
+- Added supervised indexer runtime behavior with always-on transaction stream ingestion and automated stale-wallet sync scheduling
+- Added a dedicated wallet sync queue, dead-letter queue support, and richer persisted background-job states for retries and terminal failures
+
+#### Intelligence
+- Added wallet scoring and qualification rules plus token-risk scoring rules with direct unit coverage
+
+#### Alerting and Configuration
+- Added persisted destination-backed alert delivery for Telegram, Discord webhooks, and development outbox routing
+- Added strategy creation/deletion and notification destination management APIs and corresponding settings UI controls
+
+### Changed
+
+#### API and Product Behavior
+- Changed wallet sync API behavior from inline execution to queue-backed background processing with persisted job visibility
+- Changed wallet performance persistence to store qualification metadata, average hold time, average return, and ruleset-backed wallet scores
+- Changed discovery and processor signal generation to persist token-risk metadata and full factor rows consistently
+- Updated status reporting to include wallet-sync and dead-letter queue visibility
+
+## [0.1.1] - 2026-07-26
+
+### Changed
+
+#### Live Data Integration
+- Extracted shared token discovery orchestration into a reusable indexer service and repository abstraction
+- Updated the token-discovery command to use the shared service instead of duplicating persistence and scoring logic
+- Persisted provider provenance metadata on discovery-generated launches and signals for downstream consumers
+
+#### API Behavior
+- Replaced hardcoded token and scanner `dataSource` reporting with values derived from persisted signal, launch, and snapshot metadata
+- Replaced placeholder freshness handling with snapshot- and event-based `dataFreshness`
+- Fixed scanner filtering so `minScore` and `priority` constraints affect both returned rows and pagination counts
+- Added a dedicated dashboard API that returns live overview, pipeline backlog, failure counts, and recent activity from persisted records
+- Added live watchlists, wallets, settings, and wallet-sync API routes for the Phase 2 web surfaces
+- Extended the status API with queue-depth and background-job visibility for ingestion and alert workers
+
+#### Tests and Validation
+- Added unit coverage for shared token discovery orchestration
+- Added route-level API tests for scanner, token-detail, alerts, and dashboard metadata responses
+- Added route-level API tests for watchlists, wallets, settings, and wallet-sync behavior
+- Added unit coverage for stream event to ingestion handoff
+- Added unit coverage for raw-event processor and alert-delivery worker behavior
+- Confirmed `pnpm typecheck` and `pnpm test:unit` pass across the workspace after the Phase 2 updates
+
+#### Background Processing
+- Replaced processor and alerts service stubs with real polling workers for pending raw token-launch events and pending alerts
+- Added development-log delivery flow that records alert deliveries and marks alerts delivered
+- Routed the dev-ingest API and sample-ingestion command through the shared ingestion pipeline instead of duplicating manual token, signal, and alert creation
+- Switched the shared development-ingestion path to enqueue raw-event processing jobs through BullMQ
+- Updated the processor service to enqueue downstream alert-delivery jobs, and updated the alerts service to consume queued delivery work
+- Extracted wallet ingestion and classification into a shared wallet-intelligence pipeline reused by CLI commands and the API
+- Added persisted `background_jobs` lifecycle tracking for queued ingestion and alert-delivery work
+- Added an initial transaction-stream ingestion command that feeds streamed token events into the shared queued ingestion pipeline
+
+#### Strategy Runtime
+- Replaced single-strategy signal generation with active-strategy evaluation against current versioned strategy config in discovery and raw-event processing paths
+
+#### Documentation
+- Updated current-state, roadmap, known-issues, PRD, and agent-instruction documents to reflect that the repo is in Phase 2 rather than Phase 1
+- Documented the remaining gap around route-level API regression tests
+
 ## [0.1.0] - 2026-07-21
 
 ### Added

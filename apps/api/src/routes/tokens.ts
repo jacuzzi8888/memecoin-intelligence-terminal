@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
-import { sql, eq, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
+import { resolveSourceMetadata } from "./source-metadata.js";
 
 const paramsSchema = z.object({
   address: z.string().min(32).max(44),
@@ -47,6 +48,14 @@ export const tokenRoute: FastifyPluginAsync = async (app) => {
     }));
 
     const latestSignal = signalRows[0];
+    const sourceMetadata = resolveSourceMetadata({
+      signalMetadata: latestSignal?.metadata,
+      launchMetadata: launch?.metadata,
+      snapshotAt: snapshot?.snapshotAt,
+      detectedAt: latestSignal?.detectedAt,
+      launchedAt: launch?.launchedAt,
+      firstSeenAt: token.firstSeenAt,
+    });
 
     return {
       success: true,
@@ -85,8 +94,8 @@ export const tokenRoute: FastifyPluginAsync = async (app) => {
           negativeFactors,
           detectedAt: latestSignal.detectedAt?.toISOString(),
         } : null,
-        dataSource: "development",
-        dataFreshness: snapshot?.snapshotAt?.toISOString() || new Date().toISOString(),
+        dataSource: sourceMetadata.dataSource,
+        dataFreshness: sourceMetadata.dataFreshness,
       },
       requestId: request.id,
       timestamp: new Date().toISOString(),

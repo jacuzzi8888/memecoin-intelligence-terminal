@@ -29,45 +29,45 @@ This document defines the product requirements for the Memecoin Intelligence Ter
 ### 1. Signal Discovery
 ```
 Token event detected
-→ Normalize and enrich
-→ Calculate token risk factors
-→ Identify qualified wallets involved
-→ Calculate signal score with explainable factors
-→ Match against active strategies
-→ Generate alert if threshold met
-→ Deliver through configured channels
+-> Normalize and enrich
+-> Calculate token risk factors
+-> Identify qualified wallets involved
+-> Calculate signal score with explainable factors
+-> Match against active strategies
+-> Generate alert if threshold met
+-> Deliver through configured channels
 ```
 
 ### 2. Token Research
 ```
 User enters token address or clicks from alert
-→ Display token identity, market data, launch info
-→ Show intelligence score with factor breakdown
-→ Display risk assessment
-→ Show qualified wallet activity
-→ Provide timeline of key events
-→ Offer trading action (if terminal enabled)
+-> Display token identity, market data, launch info
+-> Show intelligence score with factor breakdown
+-> Display risk assessment
+-> Show qualified wallet activity
+-> Provide timeline of key events
+-> Offer trading action (if terminal enabled)
 ```
 
 ### 3. Wallet Analysis
 ```
 User searches wallet address
-→ Display wallet identity and labels
-→ Show performance metrics (PnL, win rate, avg hold)
-→ Display recent trades and positions
-→ Show cluster membership and relationships
-→ Show cohort membership and qualification status
-→ Offer backtesting and monitoring actions
+-> Display wallet identity and labels
+-> Show performance metrics (PnL, win rate, avg hold)
+-> Display recent trades and positions
+-> Show cluster membership and relationships
+-> Show cohort membership and qualification status
+-> Offer backtesting and monitoring actions
 ```
 
 ### 4. Strategy Configuration
 ```
 User creates or edits strategy
-→ Define entry conditions (wallet count, score threshold, token filters)
-→ Define exit conditions (take-profit, stop-loss, time limits)
-→ Configure alert delivery channels
-→ Backtest against historical data
-→ Activate strategy
+-> Define entry conditions (wallet count, score threshold, token filters)
+-> Define exit conditions (take-profit, stop-loss, time limits)
+-> Configure alert delivery channels
+-> Backtest against historical data
+-> Activate strategy
 ```
 
 ## Functional Requirements
@@ -141,20 +141,20 @@ User creates or edits strategy
 
 ## Release Phases
 
-### Phase 1: Foundation (Current)
+### Phase 1: Foundation (Completed)
 - Monorepo structure
 - Database schema
-- Vertical slice (dev event → score → alert → display)
+- Vertical slice (dev event -> score -> alert -> display)
 - Basic web UI
 - Telegram bot foundation
 
-### Phase 2: Live Data
+### Phase 2: Live Data (Completed)
 - Real Solana RPC integration
 - Token discovery pipeline
 - Wallet qualification system
 - Full scoring engine
 
-### Phase 3: Trading
+### Phase 3: Trading (Next)
 - Jupiter integration
 - Non-custodial wallet connection
 - Simulated trading

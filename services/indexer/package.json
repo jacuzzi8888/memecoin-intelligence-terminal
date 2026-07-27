@@ -14,14 +14,17 @@
     "test:unit": "vitest run --passWithNoTests",
     "ingest-sample": "tsx src/commands/ingest-sample.ts",
     "discover-tokens": "tsx src/commands/discover-tokens.ts",
+    "stream-transactions": "tsx src/commands/stream-transactions.ts",
     "ingest-wallet": "tsx src/commands/ingest-wallet.ts",
     "classify-wallet": "tsx src/commands/classify-wallet.ts",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@memecoin/alerts": "workspace:*",
     "@memecoin/config": "workspace:*",
     "@memecoin/database": "workspace:*",
     "@memecoin/logger": "workspace:*",
+    "@memecoin/processor": "workspace:*",
     "@memecoin/queue": "workspace:*",
     "@memecoin/schemas": "workspace:*",
     "@memecoin/solana": "workspace:*",

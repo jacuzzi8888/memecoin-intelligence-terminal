@@ -2,11 +2,17 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { logger } from "@memecoin/logger";
 import { getEnv } from "@memecoin/config";
+import { fileURLToPath } from "url";
+import { resolve } from "path";
 import { healthRoute } from "./routes/health.js";
 import { statusRoute } from "./routes/status.js";
 import { scannerRoute } from "./routes/scanner.js";
 import { tokenRoute } from "./routes/tokens.js";
 import { alertsRoute } from "./routes/alerts.js";
+import { dashboardRoute } from "./routes/dashboard.js";
+import { watchlistsRoute } from "./routes/watchlists.js";
+import { walletsRoute } from "./routes/wallets.js";
+import { settingsRoute } from "./routes/settings.js";
 import { devIngestRoute } from "./routes/dev-ingest.js";
 
 const log = logger("api");
@@ -54,9 +60,13 @@ export async function buildApp() {
 
   await app.register(healthRoute);
   await app.register(statusRoute, { prefix: "/api/v1" });
+  await app.register(dashboardRoute, { prefix: "/api/v1" });
   await app.register(scannerRoute, { prefix: "/api/v1" });
   await app.register(tokenRoute, { prefix: "/api/v1" });
   await app.register(alertsRoute, { prefix: "/api/v1" });
+  await app.register(watchlistsRoute, { prefix: "/api/v1" });
+  await app.register(walletsRoute, { prefix: "/api/v1" });
+  await app.register(settingsRoute, { prefix: "/api/v1" });
 
   if (env.ENABLE_DEV_INGESTION && env.NODE_ENV === "development") {
     await app.register(devIngestRoute, { prefix: "/api/v1" });
@@ -78,4 +88,9 @@ export async function startServer() {
   }
 }
 
-startServer();
+const entryPath = process.argv[1] ? resolve(process.argv[1]) : null;
+const modulePath = fileURLToPath(import.meta.url);
+
+if (entryPath === modulePath) {
+  startServer();
+}

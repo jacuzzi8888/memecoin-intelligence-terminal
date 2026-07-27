@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
+import { resolveSourceMetadata } from "./source-metadata.js";
 
 const querySchema = z.object({
   limit: z.coerce.number().min(1).max(50).default(20),
@@ -25,15 +26,63 @@ export const alertsRoute: FastifyPluginAsync = async (app) => {
       status: schema.alerts.status,
       triggeredAt: schema.alerts.triggeredAt,
       strategyName: schema.strategies.name,
+      signalMetadata: schema.signals.metadata,
+      detectedAt: schema.signals.detectedAt,
+      tokenFirstSeenAt: schema.tokens.firstSeenAt,
     })
       .from(schema.alerts)
       .leftJoin(schema.strategies, eq(schema.alerts.strategyId, schema.strategies.id))
+      .leftJoin(schema.signals, eq(schema.alerts.signalId, schema.signals.id))
+      .leftJoin(schema.tokens, eq(schema.alerts.tokenAddress, schema.tokens.address))
       .orderBy(desc(schema.alerts.triggeredAt))
       .limit(query.limit);
+
+    const tokenAddresses = [...new Set(alertRows.map((alert) => alert.tokenAddress))];
+    const [snapshotRows, launchRows] = tokenAddresses.length > 0
+      ? await Promise.all([
+        db.select({
+          tokenAddress: schema.tokenSnapshots.tokenAddress,
+          snapshotAt: schema.tokenSnapshots.snapshotAt,
+        })
+          .from(schema.tokenSnapshots)
+          .where(inArray(schema.tokenSnapshots.tokenAddress, tokenAddresses))
+          .orderBy(desc(schema.tokenSnapshots.snapshotAt)),
+        db.select({
+          tokenAddress: schema.tokenLaunches.tokenAddress,
+          launchedAt: schema.tokenLaunches.launchedAt,
+          metadata: schema.tokenLaunches.metadata,
+        })
+          .from(schema.tokenLaunches)
+          .where(inArray(schema.tokenLaunches.tokenAddress, tokenAddresses))
+          .orderBy(desc(schema.tokenLaunches.launchedAt)),
+      ])
+      : [[], []];
+
+    const snapshotByToken = new Map<string, { snapshotAt: Date }>();
+    for (const snapshot of snapshotRows) {
+      if (!snapshotByToken.has(snapshot.tokenAddress)) {
+        snapshotByToken.set(snapshot.tokenAddress, snapshot);
+      }
+    }
+
+    const launchByToken = new Map<string, { launchedAt: Date; metadata: unknown }>();
+    for (const launch of launchRows) {
+      if (!launchByToken.has(launch.tokenAddress)) {
+        launchByToken.set(launch.tokenAddress, launch);
+      }
+    }
 
     return {
       success: true,
       data: alertRows.map((a) => ({
+        ...resolveSourceMetadata({
+          signalMetadata: a.signalMetadata,
+          launchMetadata: launchByToken.get(a.tokenAddress)?.metadata,
+          snapshotAt: snapshotByToken.get(a.tokenAddress)?.snapshotAt,
+          detectedAt: a.detectedAt,
+          launchedAt: launchByToken.get(a.tokenAddress)?.launchedAt,
+          firstSeenAt: a.tokenFirstSeenAt,
+        }),
         id: a.id,
         tokenAddress: a.tokenAddress,
         priority: a.priority,

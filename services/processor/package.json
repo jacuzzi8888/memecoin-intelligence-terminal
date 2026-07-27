@@ -18,6 +18,8 @@
     "@memecoin/config": "workspace:*",
     "@memecoin/logger": "workspace:*",
     "@memecoin/database": "workspace:*",
+    "@memecoin/intelligence": "workspace:*",
+    "@memecoin/notifications": "workspace:*",
     "@memecoin/schemas": "workspace:*",
     "@memecoin/queue": "workspace:*",
     "tsx": "^4.19.0"

@@ -11,6 +11,8 @@ interface ScannerItem {
   confidence: number;
   priority: string;
   detectedAt: string;
+  dataSource: string;
+  dataFreshness: string;
 }
 
 export default function ScannerPage() {
@@ -100,6 +102,8 @@ export default function ScannerPage() {
                 <th className="px-4 py-3 text-left font-medium">Score</th>
                 <th className="px-4 py-3 text-left font-medium">Confidence</th>
                 <th className="px-4 py-3 text-left font-medium">Priority</th>
+                <th className="px-4 py-3 text-left font-medium">Source</th>
+                <th className="px-4 py-3 text-left font-medium">Freshness</th>
                 <th className="px-4 py-3 text-left font-medium">Detected</th>
                 <th className="px-4 py-3 text-left font-medium">Action</th>
               </tr>
@@ -125,6 +129,8 @@ export default function ScannerPage() {
                       item.priority === "high" ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground"
                     }`}>{item.priority}</span>
                   </td>
+                  <td className="px-4 py-3 text-muted-foreground">{item.dataSource}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{new Date(item.dataFreshness).toLocaleString()}</td>
                   <td className="px-4 py-3 text-muted-foreground">{new Date(item.detectedAt).toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <a href={`/tokens/${item.tokenAddress}`} className="text-primary hover:underline text-sm">View</a>

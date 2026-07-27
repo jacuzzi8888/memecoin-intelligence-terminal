@@ -2,13 +2,27 @@
 
 import { useEffect, useState } from "react";
 
-interface StatusData {
+interface OverviewData {
   tokens: number;
   signals: number;
   alerts: number;
   wallets: number;
+}
+
+interface PipelineData {
+  rawEventsPending: number;
+  rawEventsFailed: number;
+  alertsPending: number;
+  alertsDelivered: number;
+  deliveriesDelivered: number;
+  deliveriesFailed: number;
+  failuresOpen: number;
+}
+
+interface SystemData {
   environment: string;
   version: string;
+  dataSourceSummary: string;
 }
 
 interface SignalItem {
@@ -18,6 +32,8 @@ interface SignalItem {
   signalScore: number;
   priority: string;
   detectedAt: string;
+  dataSource: string;
+  dataFreshness: string;
 }
 
 interface AlertItem {
@@ -28,29 +44,32 @@ interface AlertItem {
   signalScore: number;
   status: string;
   triggeredAt: string;
+  dataSource: string;
+  dataFreshness: string;
+}
+
+interface DashboardData {
+  overview: OverviewData;
+  pipeline: PipelineData;
+  system: SystemData;
+  recentSignals: SignalItem[];
+  recentAlerts: AlertItem[];
 }
 
 export default function DashboardPage() {
-  const [status, setStatus] = useState<StatusData | null>(null);
-  const [signals, setSignals] = useState<SignalItem[]>([]);
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-        const [statusRes, signalsRes, alertsRes] = await Promise.all([
-          fetch(`${apiUrl}/api/v1/status`),
-          fetch(`${apiUrl}/api/v1/scanner?limit=5`),
-          fetch(`${apiUrl}/api/v1/alerts?limit=5`),
-        ]);
-        const statusData: any = await statusRes.json();
-        const signalsData: any = await signalsRes.json();
-        const alertsData: any = await alertsRes.json();
-        if (statusData.success) setStatus(statusData.data);
-        if (signalsData.success) setSignals(signalsData.data);
-        if (alertsData.success) setAlerts(alertsData.data);
+        const response = await fetch(`${apiUrl}/api/v1/dashboard?signalLimit=5&alertLimit=5`);
+        const payload: any = await response.json();
+
+        if (payload.success) {
+          setDashboard(payload.data);
+        }
       } catch {
         // API may not be running in static mode
       } finally {
@@ -83,19 +102,38 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border bg-card p-6">
           <p className="text-sm font-medium text-muted-foreground">Tokens Indexed</p>
-          <p className="text-2xl font-bold">{status?.tokens ?? 0}</p>
+          <p className="text-2xl font-bold">{dashboard?.overview.tokens ?? 0}</p>
         </div>
         <div className="rounded-lg border bg-card p-6">
           <p className="text-sm font-medium text-muted-foreground">Signals Generated</p>
-          <p className="text-2xl font-bold">{status?.signals ?? 0}</p>
+          <p className="text-2xl font-bold">{dashboard?.overview.signals ?? 0}</p>
         </div>
         <div className="rounded-lg border bg-card p-6">
           <p className="text-sm font-medium text-muted-foreground">Alerts Created</p>
-          <p className="text-2xl font-bold">{status?.alerts ?? 0}</p>
+          <p className="text-2xl font-bold">{dashboard?.overview.alerts ?? 0}</p>
         </div>
         <div className="rounded-lg border bg-card p-6">
           <p className="text-sm font-medium text-muted-foreground">Wallets Tracked</p>
-          <p className="text-2xl font-bold">{status?.wallets ?? 0}</p>
+          <p className="text-2xl font-bold">{dashboard?.overview.wallets ?? 0}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border bg-card p-6">
+          <p className="text-sm font-medium text-muted-foreground">Raw Events Pending</p>
+          <p className="text-2xl font-bold">{dashboard?.pipeline.rawEventsPending ?? 0}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-6">
+          <p className="text-sm font-medium text-muted-foreground">Alerts Pending</p>
+          <p className="text-2xl font-bold">{dashboard?.pipeline.alertsPending ?? 0}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-6">
+          <p className="text-sm font-medium text-muted-foreground">Deliveries Recorded</p>
+          <p className="text-2xl font-bold">{dashboard?.pipeline.deliveriesDelivered ?? 0}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-6">
+          <p className="text-sm font-medium text-muted-foreground">Open Failures</p>
+          <p className="text-2xl font-bold">{dashboard?.pipeline.failuresOpen ?? 0}</p>
         </div>
       </div>
 
@@ -105,25 +143,27 @@ export default function DashboardPage() {
             <h2 className="font-semibold">Recent Signals</h2>
           </div>
           <div className="p-4">
-            {signals.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No signals yet. Run the ingestion pipeline to generate data.</p>
-            ) : (
+            {dashboard?.recentSignals.length ? (
               <div className="space-y-2">
-                {signals.map((s) => (
+                {dashboard.recentSignals.map((s) => (
                   <div key={s.id} className="flex items-center justify-between rounded-md border p-3">
                     <div>
                       <p className="font-medium">{s.tokenSymbol}</p>
                       <p className="text-xs text-muted-foreground font-mono">{s.tokenAddress.slice(0, 12)}...</p>
+                      <p className="text-xs text-muted-foreground">Source: {s.dataSource}</p>
                     </div>
                     <div className="text-right">
                       <p className={`font-bold ${s.signalScore >= 80 ? "text-success" : s.signalScore >= 60 ? "text-warning" : "text-muted-foreground"}`}>
                         {s.signalScore}/100
                       </p>
                       <p className="text-xs text-muted-foreground">{s.priority}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(s.dataFreshness).toLocaleString()}</p>
                     </div>
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No signals yet. Run the ingestion pipeline to generate data.</p>
             )}
           </div>
         </div>
@@ -133,15 +173,14 @@ export default function DashboardPage() {
             <h2 className="font-semibold">Recent Alerts</h2>
           </div>
           <div className="p-4">
-            {alerts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No alerts yet.</p>
-            ) : (
+            {dashboard?.recentAlerts.length ? (
               <div className="space-y-2">
-                {alerts.map((a) => (
+                {dashboard.recentAlerts.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-md border p-3">
                     <div>
                       <p className="font-medium text-sm">{a.title}</p>
                       <p className="text-xs text-muted-foreground">{a.status}</p>
+                      <p className="text-xs text-muted-foreground">{a.dataSource}</p>
                     </div>
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${
                       a.priority === "critical" ? "bg-destructive/10 text-destructive" :
@@ -153,6 +192,8 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No alerts yet.</p>
             )}
           </div>
         </div>
@@ -161,10 +202,10 @@ export default function DashboardPage() {
       <div className="rounded-lg border bg-card p-4">
         <h2 className="mb-2 font-semibold">System Status</h2>
         <div className="grid gap-2 text-sm">
-          <div className="flex justify-between"><span className="text-muted-foreground">Environment</span><span>{status?.environment || "development"}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Version</span><span>{status?.version || "0.1.0"}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Environment</span><span>{dashboard?.system.environment || "development"}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Version</span><span>{dashboard?.system.version || "0.1.0"}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Database</span><span className="text-success">Connected</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Data Source</span><span>Development (mock)</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Data Source</span><span>{dashboard?.system.dataSourceSummary || "No live metadata yet"}</span></div>
         </div>
       </div>
     </div>

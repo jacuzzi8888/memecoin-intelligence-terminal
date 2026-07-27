@@ -10,6 +10,8 @@ interface AlertData {
   triggeredAt: string;
   tokenAddress: string;
   webDeepLink: string;
+  dataSource: string;
+  dataFreshness: string;
 }
 
 export default function AlertsPage() {
@@ -40,6 +42,7 @@ export default function AlertsPage() {
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground font-mono">{a.tokenAddress.slice(0, 16)}...</p>
                   <p className="mt-1 text-xs text-muted-foreground">Score: {a.signalScore} | Status: {a.status} | {new Date(a.triggeredAt).toLocaleString()}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Source: {a.dataSource} | Freshness: {new Date(a.dataFreshness).toLocaleString()}</p>
                 </div>
                 {a.webDeepLink && <a href={a.webDeepLink} className="text-sm text-primary hover:underline">View Token</a>}
               </div>

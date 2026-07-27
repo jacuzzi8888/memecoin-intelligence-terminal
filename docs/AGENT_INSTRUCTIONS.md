@@ -12,6 +12,7 @@
 
 ### Documentation
 - Update `CURRENT_STATE.md` after completing work
+- Update `IMPLEMENTATION_PLAN.md` when roadmap status changes or phase progress shifts materially
 - Update `DECISIONS.md` when making architecture decisions
 - Update `KNOWN_ISSUES.md` when discovering issues
 - Update `CHANGELOG.md` when completing features
@@ -69,7 +70,7 @@ Never call Helius, Birdeye, Jupiter, or other providers directly from business l
 
 ### Data Flow
 ```
-Raw events → Normalized entities → Derived intelligence → Signals → Alerts
+Raw events -> Normalized entities -> Derived intelligence -> Signals -> Alerts
 ```
 
 Maintain this separation. Raw data is append-only. Intelligence is reproducible.
@@ -86,9 +87,9 @@ All derived intelligence includes:
 - API calls through typed client functions
 - No direct database access from components
 
-## What NOT To Build Yet
+## What NOT To Build Ahead Of The Roadmap
 
-Do not implement in Phase 1:
+Do not implement later-phase work unless it is explicitly requested and consistent with the active roadmap phase:
 - Live paid-provider ingestion
 - Complete wallet PnL calculation
 - Advanced wallet clustering
@@ -103,7 +104,7 @@ Do not implement in Phase 1:
 - Native mobile applications
 - Complex graph visualization
 
-Create interfaces and documentation for these, but do not implement them.
+Create interfaces and documentation for these when helpful, but do not present them as completed product capabilities.
 
 ## Common Commands
 

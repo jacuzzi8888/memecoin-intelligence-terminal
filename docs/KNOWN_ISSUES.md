@@ -1,24 +1,16 @@
 # Known Issues
 
-## Phase 2 Reality Gaps
-
-### KI-001: Product surfaces still lean on seeded development data
-**Severity**: Medium
-**Description**: The provider layer supports live integrations, but the main demo and dashboard flows still rely heavily on seeded records.
-**Impact**: The app can look more complete than the end-to-end live-data path really is.
-**Resolution**: Route scanner, token detail, dashboard, and alerts through the same live ingestion and enrichment pipeline.
-
 ### KI-002: Trading terminal remains read-only
 **Severity**: Expected
 **Description**: The trading UI exists, but quote retrieval, wallet connection, and execution are not enabled.
 **Impact**: Users can inspect the interface but cannot complete trading workflows.
 **Resolution**: Implement swap quote provider, wallet integration, simulation, and transaction submission.
 
-### KI-003: Alerts service is not fully operational
+### KI-003: Live external delivery still depends on credentials
 **Severity**: Medium
-**Description**: Alert records can be queried, but the dedicated alerts worker is still a stub and delivery channels are incomplete.
-**Impact**: Local demos can show alerts in the database without proving a production-ready delivery path.
-**Resolution**: Finish queue-driven alert generation and delivery workers, then add delivery retries and observability.
+**Description**: Telegram and Discord delivery paths are implemented, but they require valid bot tokens or webhook destinations to deliver outside the development outbox.
+**Impact**: Local demos without credentials fall back to the dev outbox and do not prove real external delivery.
+**Resolution**: Configure real destination credentials and validate end-to-end delivery in the target environment.
 
 ### KI-004: Optional provider credentials gate the best data paths
 **Severity**: Medium
@@ -32,13 +24,13 @@
 **Impact**: Repo-wide test status was misleading.
 **Resolution**: Package `vitest` scripts now use `--passWithNoTests`.
 
-## Architecture Limitations
+### KI-006: API route coverage is still selective
+**Severity**: Low
+**Description**: Route-level tests now cover scanner, token detail, alerts, dashboard, watchlists, wallets, settings, and wallet-sync queueing happy paths, but pagination edges and broader negative-path coverage are still incomplete.
+**Impact**: Regressions in other endpoints or more complex query behavior could still slip through without direct route tests.
+**Resolution**: Expand API tests to cover status, dev ingestion, pagination edges, and negative-path error handling.
 
-### KI-010: No production-grade queue orchestration yet
-**Severity**: Medium
-**Description**: The codebase defines queue and worker layers, but the full background-processing lifecycle is not yet productionized.
-**Impact**: Operational behavior still depends on ad hoc development commands more than long-running workers.
-**Resolution**: Complete queue consumers, retries, monitoring, and service lifecycle management.
+## Architecture Limitations
 
 ### KI-011: No production auth configuration
 **Severity**: Low
@@ -59,9 +51,3 @@
 **Description**: Public RPC endpoints may return 429 responses during heavier discovery or parsing workloads.
 **Impact**: Discovery and enrichment can become unreliable without provider-backed access.
 **Resolution**: Prefer Helius-backed RPC for repeatable development and production usage.
-
-### KI-021: Real-time streaming is not fully wired through the product
-**Severity**: Medium
-**Description**: Streaming provider abstractions exist, but the product does not yet expose a fully integrated real-time signal path.
-**Impact**: New token detection and alert latency are still constrained by the current development workflow.
-**Resolution**: Complete the transaction-stream ingestion path and connect it to scoring and alert generation.

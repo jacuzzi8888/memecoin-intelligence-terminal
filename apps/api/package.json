@@ -24,12 +24,13 @@
     "zod": "^3.24.0",
     "@fastify/type-provider-typebox": "^5.1.0",
     "@memecoin/config": "workspace:*",
-    "@memecoin/logger": "workspace:*",
     "@memecoin/database": "workspace:*",
-    "@memecoin/schemas": "workspace:*",
+    "@memecoin/indexer": "workspace:*",
     "@memecoin/intelligence": "workspace:*",
+    "@memecoin/logger": "workspace:*",
     "@memecoin/notifications": "workspace:*",
     "@memecoin/queue": "workspace:*",
+    "@memecoin/schemas": "workspace:*",
     "tsx": "^4.19.0"
   },
   "devDependencies": {
