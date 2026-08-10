@@ -76,7 +76,8 @@ class FakeQuery implements PromiseLike<Array<Record<string, unknown>>> {
   }
 
   then<TResult1 = Array<Record<string, unknown>>, TResult2 = never>(
-    onfulfilled?: ((value: Array<Record<string, unknown>>) => TResult1 | PromiseLike<TResult1>) | null,
+    onfulfilled?:
+      ((value: Array<Record<string, unknown>>) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return Promise.resolve(this.execute()).then(onfulfilled, onrejected);
@@ -174,44 +175,52 @@ const detectedAt = new Date("2026-07-26T09:58:00.000Z");
 const firstSeenAt = new Date("2026-07-26T09:55:30.000Z");
 
 const fixtures: Fixtures = {
-  tokens: [{
-    id: "token-1",
-    address: tokenAddress,
-    symbol: "TEST",
-    name: "Test Token",
-    decimals: 9,
-    isVerified: false,
-    firstSeenAt,
-  }],
-  wallets: [{
-    id: "wallet-1",
-    address: walletAddress,
-  }],
-  tokenSnapshots: [{
-    tokenId: "token-1",
-    tokenAddress,
-    marketCapUsd: "250000",
-    priceUsd: "0.25",
-    volume1hUsd: "50000",
-    volume24hUsd: "125000",
-    liquidityUsd: "90000",
-    holderCount: 123,
-    priceChange1h: "4.2",
-    priceChange24h: "12.4",
-    snapshotAt,
-  }],
-  tokenLaunches: [{
-    tokenId: "token-1",
-    tokenAddress,
-    deployerAddress: "Deployer11111111111111111111111111111111111",
-    launchedAt,
-    initialLiquidityUsd: "10000",
-    launchProgram: "Token Program",
-    metadata: {
-      discoveryProvider: "helius",
-      marketDataProvider: "birdeye",
+  tokens: [
+    {
+      id: "token-1",
+      address: tokenAddress,
+      symbol: "TEST",
+      name: "Test Token",
+      decimals: 9,
+      isVerified: false,
+      firstSeenAt,
     },
-  }],
+  ],
+  wallets: [
+    {
+      id: "wallet-1",
+      address: walletAddress,
+    },
+  ],
+  tokenSnapshots: [
+    {
+      tokenId: "token-1",
+      tokenAddress,
+      marketCapUsd: "250000",
+      priceUsd: "0.25",
+      volume1hUsd: "50000",
+      volume24hUsd: "125000",
+      liquidityUsd: "90000",
+      holderCount: 123,
+      priceChange1h: "4.2",
+      priceChange24h: "12.4",
+      snapshotAt,
+    },
+  ],
+  tokenLaunches: [
+    {
+      tokenId: "token-1",
+      tokenAddress,
+      deployerAddress: "Deployer11111111111111111111111111111111111",
+      launchedAt,
+      initialLiquidityUsd: "10000",
+      launchProgram: "Token Program",
+      metadata: {
+        discoveryProvider: "helius",
+        marketDataProvider: "birdeye",
+      },
+    },
+  ],
   rawProviderEvents: [
     {
       id: "raw-1",
@@ -226,62 +235,80 @@ const fixtures: Fixtures = {
       processingStatus: "failed",
     },
   ],
-  tokenSignals: [{
-    id: "signal-1",
-    tokenAddress,
-    tokenId: "token-1",
-    signalScore: 88,
-    confidence: "0.91",
-    rulesetVersion: "token-signal-v0.1.0",
-    priority: "critical",
-    metadata: {
-      discoveryProvider: "helius",
-      marketDataProvider: "birdeye",
-      snapshotAvailable: true,
+  tokenSignals: [
+    {
+      id: "signal-1",
+      tokenAddress,
+      tokenId: "token-1",
+      signalScore: 88,
+      confidence: "0.91",
+      rulesetVersion: "token-signal-v0.1.0",
+      priority: "critical",
+      metadata: {
+        discoveryProvider: "helius",
+        marketDataProvider: "birdeye",
+        snapshotAvailable: true,
+      },
+      detectedAt,
     },
-    detectedAt,
-  }],
-  signalFactors: [
-    { signalId: "signal-1", factorType: "positive", factorName: "liquidity", rawValue: "90000", contribution: "15" },
-    { signalId: "signal-1", factorType: "negative", factorName: "concentration", rawValue: "40", contribution: "-5" },
   ],
-  scannerResults: [{
-    id: "signal-1",
-    tokenAddress,
-    signalScore: 88,
-    confidence: "0.91",
-    priority: "critical",
-    rulesetVersion: "token-signal-v0.1.0",
-    metadata: {
-      discoveryProvider: "helius",
-      marketDataProvider: "birdeye",
-      snapshotAvailable: true,
+  signalFactors: [
+    {
+      signalId: "signal-1",
+      factorType: "positive",
+      factorName: "liquidity",
+      rawValue: "90000",
+      contribution: "15",
     },
-    detectedAt,
-    tokenSymbol: "TEST",
-    tokenName: "Test Token",
-    tokenFirstSeenAt: firstSeenAt,
-  }],
-  alertsResults: [{
-    id: "alert-1",
-    tokenAddress,
-    priority: "critical",
-    title: "New Token: TEST",
-    message: "Signal generated",
-    signalScore: 88,
-    webDeepLink: `http://localhost:3000/tokens/${tokenAddress}`,
-    telegramDeepLink: `https://t.me/example?start=${tokenAddress}`,
-    status: "pending",
-    triggeredAt: detectedAt,
-    strategyName: "Alpha Alert",
-    signalMetadata: {
-      discoveryProvider: "helius",
-      marketDataProvider: "birdeye",
-      snapshotAvailable: true,
+    {
+      signalId: "signal-1",
+      factorType: "negative",
+      factorName: "concentration",
+      rawValue: "40",
+      contribution: "-5",
     },
-    detectedAt,
-    tokenFirstSeenAt: firstSeenAt,
-  }],
+  ],
+  scannerResults: [
+    {
+      id: "signal-1",
+      tokenAddress,
+      signalScore: 88,
+      confidence: "0.91",
+      priority: "critical",
+      rulesetVersion: "token-signal-v0.1.0",
+      metadata: {
+        discoveryProvider: "helius",
+        marketDataProvider: "birdeye",
+        snapshotAvailable: true,
+      },
+      detectedAt,
+      tokenSymbol: "TEST",
+      tokenName: "Test Token",
+      tokenFirstSeenAt: firstSeenAt,
+    },
+  ],
+  alertsResults: [
+    {
+      id: "alert-1",
+      tokenAddress,
+      priority: "critical",
+      title: "New Token: TEST",
+      message: "Signal generated",
+      signalScore: 88,
+      webDeepLink: `http://localhost:3000/tokens/${tokenAddress}`,
+      telegramDeepLink: `https://t.me/example?start=${tokenAddress}`,
+      status: "pending",
+      triggeredAt: detectedAt,
+      strategyName: "Alpha Alert",
+      signalMetadata: {
+        discoveryProvider: "helius",
+        marketDataProvider: "birdeye",
+        snapshotAvailable: true,
+      },
+      detectedAt,
+      tokenFirstSeenAt: firstSeenAt,
+    },
+  ],
   alertDeliveries: [
     {
       id: "delivery-1",
@@ -316,7 +343,7 @@ describe("API metadata routes", () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) await app.close();
     vi.clearAllMocks();
   });
 

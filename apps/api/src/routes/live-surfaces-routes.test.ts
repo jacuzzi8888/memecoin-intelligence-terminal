@@ -56,9 +56,7 @@ interface Fixtures {
 class FakeQuery implements PromiseLike<Array<Record<string, unknown>>> {
   private baseTable: unknown;
 
-  constructor(
-    private readonly fixtures: Fixtures,
-  ) {}
+  constructor(private readonly fixtures: Fixtures) {}
 
   from(table: unknown) {
     this.baseTable = table;
@@ -78,7 +76,8 @@ class FakeQuery implements PromiseLike<Array<Record<string, unknown>>> {
   }
 
   then<TResult1 = Array<Record<string, unknown>>, TResult2 = never>(
-    onfulfilled?: ((value: Array<Record<string, unknown>>) => TResult1 | PromiseLike<TResult1>) | null,
+    onfulfilled?:
+      ((value: Array<Record<string, unknown>>) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     return Promise.resolve(this.execute()).then(onfulfilled, onrejected);
@@ -94,7 +93,8 @@ class FakeQuery implements PromiseLike<Array<Record<string, unknown>>> {
     if (this.baseTable === schema.walletPositions) return this.fixtures.walletPositions ?? [];
     if (this.baseTable === schema.backgroundJobs) return this.fixtures.backgroundJobs ?? [];
     if (this.baseTable === schema.userSettings) return this.fixtures.userSettings ?? [];
-    if (this.baseTable === schema.notificationDestinations) return this.fixtures.notificationDestinations ?? [];
+    if (this.baseTable === schema.notificationDestinations)
+      return this.fixtures.notificationDestinations ?? [];
     if (this.baseTable === schema.strategies) return this.fixtures.strategies ?? [];
     if (this.baseTable === schema.strategyVersions) return this.fixtures.strategyVersions ?? [];
     return [];
@@ -127,141 +127,167 @@ function createFakeDb(fixtures: Fixtures) {
 }
 
 const fixtures: Fixtures = {
-  users: [{
-    id: "user-1",
-    name: "Dev Admin",
-    email: "admin@memecoin.dev",
-    role: "admin",
-  }],
-  watchlists: [{
-    id: "watchlist-1",
-    userId: "user-1",
-    name: "Alpha Radar",
-    description: "High-conviction names",
-    isDefault: false,
-    createdAt: new Date("2026-07-26T12:00:00.000Z"),
-    updatedAt: new Date("2026-07-26T12:00:00.000Z"),
-  }],
-  watchlistItems: [{
-    id: "item-1",
-    watchlistId: "watchlist-1",
-    itemType: "token",
-    itemAddress: "Mint111111111111111111111111111111111111111",
-    note: "Fresh launch",
-    addedAt: new Date("2026-07-26T12:05:00.000Z"),
-  }],
-  wallets: [{
-    id: "wallet-1",
-    address: VALID_WALLET_ADDRESS,
-    label: "Fast Money",
-    classification: "early_buyer",
-    totalTrades: 12,
-    firstSeenAt: new Date("2026-07-25T10:00:00.000Z"),
-    lastSeenAt: new Date("2026-07-26T10:00:00.000Z"),
-    metadata: { qualification: { isQualified: true, walletScore: 77 } },
-  }, {
-    id: "wallet-2",
-    address: FLAGGED_WALLET_ADDRESS,
-    label: "Automated Risk",
-    classification: "bot",
-    totalTrades: 140,
-    firstSeenAt: new Date("2026-07-24T10:00:00.000Z"),
-    lastSeenAt: new Date("2026-07-25T10:00:00.000Z"),
-    metadata: { qualification: { isQualified: false, walletScore: 25 } },
-  }],
-  walletLabels: [{
-    id: "label-1",
-    walletId: "wallet-1",
-    walletAddress: VALID_WALLET_ADDRESS,
-    label: "early_buyer",
-    confidence: "0.82",
-    source: "wallet-classifier-v0.1.0",
-    rulesetVersion: "wallet-classifier-v0.1.0",
-    assignedAt: new Date("2026-07-26T10:00:00.000Z"),
-  }],
-  walletPerformance: [{
-    id: "performance-1",
-    walletId: "wallet-1",
-    walletAddress: VALID_WALLET_ADDRESS,
-    rulesetVersion: "wallet-classifier-v0.1.0",
-    totalPnlUsd: "1500",
-    realizedPnlUsd: "500",
-    winRate: "0.65",
-    totalTrades: 12,
-    profitableTrades: 8,
-    score: 77,
-    calculatedAt: new Date("2026-07-26T10:05:00.000Z"),
-  }, {
-    id: "performance-2",
-    walletId: "wallet-2",
-    walletAddress: FLAGGED_WALLET_ADDRESS,
-    rulesetVersion: "wallet-classifier-v0.1.0",
-    totalPnlUsd: "-500",
-    realizedPnlUsd: "-500",
-    winRate: "0.2",
-    totalTrades: 140,
-    profitableTrades: 28,
-    score: 25,
-    calculatedAt: new Date("2026-07-25T10:05:00.000Z"),
-  }],
-  walletPositions: [{
-    id: "position-1",
-    walletId: "wallet-1",
-    walletAddress: VALID_WALLET_ADDRESS,
-    tokenAddress: "Mint111111111111111111111111111111111111111",
-    amount: "1200",
-    avgEntryPrice: "0.001",
-    currentValueUsd: "1250",
-    realizedPnlUsd: "100",
-    unrealizedPnlUsd: "50",
-    openedAt: new Date("2026-07-26T09:00:00.000Z"),
-    status: "open",
-  }],
-  backgroundJobs: [{
-    id: "job-1",
-    queueName: "wallet-sync",
-    jobType: "sync-wallet",
-    bullJobId: "wallet-job-0",
-    status: "completed",
-    payload: { walletAddress: VALID_WALLET_ADDRESS },
-    result: {},
-    error: null,
-    attempts: 1,
-    maxAttempts: 3,
-    startedAt: new Date("2026-07-26T10:01:00.000Z"),
-    completedAt: new Date("2026-07-26T10:02:00.000Z"),
-    createdAt: new Date("2026-07-26T10:00:00.000Z"),
-  }],
-  userSettings: [{
-    userId: "user-1",
-    preferences: { density: "compact" },
-    notificationPrefs: { telegram: true },
-    displayPrefs: { theme: "system" },
-    tradingPrefs: { slippageBps: 100 },
-  }],
-  notificationDestinations: [{
-    id: "destination-1",
-    userId: "user-1",
-    channel: "telegram",
-    destination: "@dev_outbox",
-    enabled: true,
-    priorityMin: "high",
-  }],
-  strategies: [{
-    id: "strategy-1",
-    name: "Alpha Alert",
-    description: "High score plus qualified wallets",
-    isActive: "true",
-    currentVersion: "v0.1.0",
-  }],
-  strategyVersions: [{
-    id: "version-1",
-    strategyId: "strategy-1",
-    version: "v0.1.0",
-    isActive: "true",
-    config: { minScore: 70 },
-    createdAt: new Date("2026-07-26T09:30:00.000Z"),
-  }],
+  users: [
+    {
+      id: "user-1",
+      name: "Dev Admin",
+      email: "admin@memecoin.dev",
+      role: "admin",
+    },
+  ],
+  watchlists: [
+    {
+      id: "watchlist-1",
+      userId: "user-1",
+      name: "Alpha Radar",
+      description: "High-conviction names",
+      isDefault: false,
+      createdAt: new Date("2026-07-26T12:00:00.000Z"),
+      updatedAt: new Date("2026-07-26T12:00:00.000Z"),
+    },
+  ],
+  watchlistItems: [
+    {
+      id: "item-1",
+      watchlistId: "watchlist-1",
+      itemType: "token",
+      itemAddress: "Mint111111111111111111111111111111111111111",
+      note: "Fresh launch",
+      addedAt: new Date("2026-07-26T12:05:00.000Z"),
+    },
+  ],
+  wallets: [
+    {
+      id: "wallet-1",
+      address: VALID_WALLET_ADDRESS,
+      label: "Fast Money",
+      classification: "early_buyer",
+      totalTrades: 12,
+      firstSeenAt: new Date("2026-07-25T10:00:00.000Z"),
+      lastSeenAt: new Date("2026-07-26T10:00:00.000Z"),
+      metadata: { qualification: { isQualified: true, walletScore: 77 } },
+    },
+    {
+      id: "wallet-2",
+      address: FLAGGED_WALLET_ADDRESS,
+      label: "Automated Risk",
+      classification: "bot",
+      totalTrades: 140,
+      firstSeenAt: new Date("2026-07-24T10:00:00.000Z"),
+      lastSeenAt: new Date("2026-07-25T10:00:00.000Z"),
+      metadata: { qualification: { isQualified: false, walletScore: 25 } },
+    },
+  ],
+  walletLabels: [
+    {
+      id: "label-1",
+      walletId: "wallet-1",
+      walletAddress: VALID_WALLET_ADDRESS,
+      label: "early_buyer",
+      confidence: "0.82",
+      source: "wallet-classifier-v0.1.0",
+      rulesetVersion: "wallet-classifier-v0.1.0",
+      assignedAt: new Date("2026-07-26T10:00:00.000Z"),
+    },
+  ],
+  walletPerformance: [
+    {
+      id: "performance-1",
+      walletId: "wallet-1",
+      walletAddress: VALID_WALLET_ADDRESS,
+      rulesetVersion: "wallet-classifier-v0.1.0",
+      totalPnlUsd: "1500",
+      realizedPnlUsd: "500",
+      winRate: "0.65",
+      totalTrades: 12,
+      profitableTrades: 8,
+      score: 77,
+      calculatedAt: new Date("2026-07-26T10:05:00.000Z"),
+    },
+    {
+      id: "performance-2",
+      walletId: "wallet-2",
+      walletAddress: FLAGGED_WALLET_ADDRESS,
+      rulesetVersion: "wallet-classifier-v0.1.0",
+      totalPnlUsd: "-500",
+      realizedPnlUsd: "-500",
+      winRate: "0.2",
+      totalTrades: 140,
+      profitableTrades: 28,
+      score: 25,
+      calculatedAt: new Date("2026-07-25T10:05:00.000Z"),
+    },
+  ],
+  walletPositions: [
+    {
+      id: "position-1",
+      walletId: "wallet-1",
+      walletAddress: VALID_WALLET_ADDRESS,
+      tokenAddress: "Mint111111111111111111111111111111111111111",
+      amount: "1200",
+      avgEntryPrice: "0.001",
+      currentValueUsd: "1250",
+      realizedPnlUsd: "100",
+      unrealizedPnlUsd: "50",
+      openedAt: new Date("2026-07-26T09:00:00.000Z"),
+      status: "open",
+    },
+  ],
+  backgroundJobs: [
+    {
+      id: "job-1",
+      queueName: "wallet-sync",
+      jobType: "sync-wallet",
+      bullJobId: "wallet-job-0",
+      status: "completed",
+      payload: { walletAddress: VALID_WALLET_ADDRESS },
+      result: {},
+      error: null,
+      attempts: 1,
+      maxAttempts: 3,
+      startedAt: new Date("2026-07-26T10:01:00.000Z"),
+      completedAt: new Date("2026-07-26T10:02:00.000Z"),
+      createdAt: new Date("2026-07-26T10:00:00.000Z"),
+    },
+  ],
+  userSettings: [
+    {
+      userId: "user-1",
+      preferences: { density: "compact" },
+      notificationPrefs: { telegram: true },
+      displayPrefs: { theme: "system" },
+      tradingPrefs: { slippageBps: 100 },
+    },
+  ],
+  notificationDestinations: [
+    {
+      id: "destination-1",
+      userId: "user-1",
+      channel: "telegram",
+      destination: "@dev_outbox",
+      enabled: true,
+      priorityMin: "high",
+    },
+  ],
+  strategies: [
+    {
+      id: "strategy-1",
+      name: "Alpha Alert",
+      description: "High score plus qualified wallets",
+      isActive: "true",
+      currentVersion: "v0.1.0",
+    },
+  ],
+  strategyVersions: [
+    {
+      id: "version-1",
+      strategyId: "strategy-1",
+      version: "v0.1.0",
+      isActive: "true",
+      config: { minScore: 70 },
+      createdAt: new Date("2026-07-26T09:30:00.000Z"),
+    },
+  ],
 };
 
 describe("API live surfaces routes", () => {
@@ -274,7 +300,7 @@ describe("API live surfaces routes", () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) await app.close();
     vi.clearAllMocks();
   });
 

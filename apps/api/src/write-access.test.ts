@@ -26,7 +26,7 @@ describe("personal write access", () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 
   it("rejects a mutation without the personal key", async () => {
