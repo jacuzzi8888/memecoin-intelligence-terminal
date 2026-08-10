@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Eye, Plus, Trash2, WalletCards } from "lucide-react";
+import { AegisSelect, ErrorState, LoadingRows, MetricCard, Panel, StatusBadge, formatRelative, shortAddress } from "@/components/aegis-ui";
+import { API_BASE_URL } from "@/lib/api-url";
+import { apiFetch } from "@/lib/api-client";
 
 interface WatchlistItem {
   id: string;
@@ -8,15 +13,8 @@ interface WatchlistItem {
   itemAddress: string;
   note?: string | null;
   addedAt: string;
-  token?: {
-    symbol?: string | null;
-    name?: string | null;
-  } | null;
-  wallet?: {
-    label?: string | null;
-    classification?: string | null;
-    totalTrades?: number | null;
-  } | null;
+  token?: { symbol?: string | null; name?: string | null } | null;
+  wallet?: { label?: string | null; classification?: string | null; totalTrades?: number | null } | null;
 }
 
 interface Watchlist {
@@ -37,238 +35,186 @@ export default function WatchlistsPage() {
   const [itemType, setItemType] = useState<"token" | "wallet">("token");
   const [itemAddress, setItemAddress] = useState("");
   const [itemNote, setItemNote] = useState("");
+  const apiUrl = API_BASE_URL;
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-
-  async function fetchWatchlists() {
+  const fetchWatchlists = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
-      const response = await fetch(`${apiUrl}/api/v1/watchlists`);
-      const payload: any = await response.json();
-
-      if (!payload.success) {
-        throw new Error(payload.error || "Failed to load watchlists");
-      }
-
+      const response = await fetch(`${apiUrl}/api/v1/watchlists`, { cache: "no-store" });
+      const payload: { success?: boolean; data?: Watchlist[]; error?: string } = await response.json();
+      if (!payload.success || !payload.data) throw new Error(payload.error || "Failed to load watchlists");
       setWatchlists(payload.data);
-      if (!selectedWatchlistId && payload.data[0]?.id) {
-        setSelectedWatchlistId(payload.data[0].id);
-      }
+      setSelectedWatchlistId((current) => current || payload.data?.[0]?.id || "");
     } catch (fetchError) {
+      setWatchlists([]);
       setError(fetchError instanceof Error ? fetchError.message : "Failed to load watchlists");
     } finally {
       setLoading(false);
     }
-  }
+  }, [apiUrl]);
 
   useEffect(() => {
-    fetchWatchlists();
-  }, []);
+    void fetchWatchlists();
+  }, [fetchWatchlists]);
 
   async function createWatchlist() {
     if (!newWatchlistName.trim()) return;
-
-    const response = await fetch(`${apiUrl}/api/v1/watchlists`, {
+    const response = await apiFetch(`${apiUrl}/api/v1/watchlists`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newWatchlistName.trim(),
-        description: newWatchlistDescription.trim() || undefined,
-      }),
+      body: JSON.stringify({ name: newWatchlistName.trim(), description: newWatchlistDescription.trim() || undefined }),
     });
-    const payload: any = await response.json();
-
-    if (payload.success) {
-      setWatchlists(payload.data);
-      setNewWatchlistName("");
-      setNewWatchlistDescription("");
-      if (payload.data[0]?.id && !selectedWatchlistId) {
-        setSelectedWatchlistId(payload.data[0].id);
-      }
+    const payload: { success?: boolean; data?: Watchlist[]; error?: string } = await response.json();
+    if (!payload.success || !payload.data) {
+      setError(payload.error ?? "Failed to create watchlist");
+      return;
     }
+    setWatchlists(payload.data);
+    setSelectedWatchlistId(payload.data[0]?.id ?? "");
+    setNewWatchlistName("");
+    setNewWatchlistDescription("");
   }
 
   async function addItem() {
     if (!selectedWatchlistId || !itemAddress.trim()) return;
-
-    const response = await fetch(`${apiUrl}/api/v1/watchlists/${selectedWatchlistId}/items`, {
+    const response = await apiFetch(`${apiUrl}/api/v1/watchlists/${selectedWatchlistId}/items`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        itemType,
-        itemAddress: itemAddress.trim(),
-        note: itemNote.trim() || undefined,
-      }),
+      body: JSON.stringify({ itemType, itemAddress: itemAddress.trim(), note: itemNote.trim() || undefined }),
     });
-    const payload: any = await response.json();
-
-    if (payload.success) {
-      setWatchlists(payload.data);
-      setItemAddress("");
-      setItemNote("");
+    const payload: { success?: boolean; data?: Watchlist[]; error?: string } = await response.json();
+    if (!payload.success || !payload.data) {
+      setError(payload.error ?? "Failed to add watchlist item");
+      return;
     }
+    setWatchlists(payload.data);
+    setItemAddress("");
+    setItemNote("");
   }
 
   async function removeItem(watchlistId: string, itemId: string) {
-    const response = await fetch(`${apiUrl}/api/v1/watchlists/${watchlistId}/items/${itemId}`, {
-      method: "DELETE",
-    });
-    const payload: any = await response.json();
-
-    if (payload.success) {
-      setWatchlists(payload.data);
-    }
+    const response = await apiFetch(`${apiUrl}/api/v1/watchlists/${watchlistId}/items/${itemId}`, { method: "DELETE" });
+    const payload: { success?: boolean; data?: Watchlist[]; error?: string } = await response.json();
+    if (payload.success && payload.data) setWatchlists(payload.data);
+    else setError(payload.error ?? "Failed to remove item");
   }
 
+  const selectedWatchlist = useMemo(
+    () => watchlists.find((watchlist) => watchlist.id === selectedWatchlistId) ?? watchlists[0] ?? null,
+    [selectedWatchlistId, watchlists],
+  );
+  const totalItems = watchlists.reduce((sum, watchlist) => sum + watchlist.itemCount, 0);
+  const tokenItems = watchlists.reduce((sum, watchlist) => sum + watchlist.items.filter((item) => item.itemType === "token").length, 0);
+  const walletItems = totalItems - tokenItems;
+
+  if (loading) return <LoadingRows rows={4} />;
+
   return (
-    <div className="flex flex-col space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Watchlists</h1>
-        <p className="text-muted-foreground">Track token and wallet addresses from persisted application data.</p>
+    <div className="space-y-4">
+      {error ? <ErrorState title="Watchlists degraded" message={error} /> : null}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <MetricCard label="Watchlists" value={watchlists.length} tone="primary" />
+        <MetricCard label="Items" value={totalItems} />
+        <MetricCard label="Tokens" value={tokenItems} tone="success" />
+        <MetricCard label="Wallets" value={walletItems} tone="warning" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-lg border bg-card p-6 space-y-4">
-          <div>
-            <h2 className="font-semibold">Create Watchlist</h2>
-            <p className="text-sm text-muted-foreground">Development-mode watchlists are stored in the database and can mix tokens and wallets.</p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <input
-              value={newWatchlistName}
-              onChange={(e) => setNewWatchlistName(e.target.value)}
-              placeholder="Alpha candidates"
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={newWatchlistDescription}
-              onChange={(e) => setNewWatchlistDescription(e.target.value)}
-              placeholder="Optional description"
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <button onClick={createWatchlist} className="rounded-md border px-3 py-2 text-sm hover:bg-muted/50">
-            Create Watchlist
-          </button>
-        </div>
-
-        <div className="rounded-lg border bg-card p-6 space-y-4">
-          <div>
-            <h2 className="font-semibold">Add Item</h2>
-            <p className="text-sm text-muted-foreground">Attach a token mint or wallet address to any saved watchlist.</p>
-          </div>
-          <div className="grid gap-3">
-            <select
-              value={selectedWatchlistId}
-              onChange={(e) => setSelectedWatchlistId(e.target.value)}
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Select watchlist</option>
-              {watchlists.map((watchlist) => (
-                <option key={watchlist.id} value={watchlist.id}>{watchlist.name}</option>
-              ))}
-            </select>
-            <select
-              value={itemType}
-              onChange={(e) => setItemType(e.target.value as "token" | "wallet")}
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              <option value="token">Token</option>
-              <option value="wallet">Wallet</option>
-            </select>
-            <input
-              value={itemAddress}
-              onChange={(e) => setItemAddress(e.target.value)}
-              placeholder={itemType === "token" ? "Token mint address" : "Wallet address"}
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={itemNote}
-              onChange={(e) => setItemNote(e.target.value)}
-              placeholder="Optional note"
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <button onClick={addItem} className="rounded-md border px-3 py-2 text-sm hover:bg-muted/50">
-            Add Item
-          </button>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-lg border bg-muted" />)}
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && watchlists.length === 0 && (
-        <div className="rounded-lg border bg-card p-8 text-sm text-muted-foreground">
-          No watchlists yet. Create one above to start tracking tokens or wallets.
-        </div>
-      )}
-
-      {!loading && !error && watchlists.length > 0 && (
-        <div className="grid gap-4">
-          {watchlists.map((watchlist) => (
-            <div key={watchlist.id} className="rounded-lg border bg-card p-6 space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="font-semibold">{watchlist.name}</h2>
-                  <p className="text-sm text-muted-foreground">{watchlist.description || "No description"}</p>
+      <div className="grid gap-4 xl:grid-cols-[280px_1fr_360px]">
+        <Panel title="Lists" icon={<Eye className="h-4 w-4" />}>
+          <div className="divide-y divide-outline">
+            {watchlists.map((watchlist) => (
+              <button
+                key={watchlist.id}
+                onClick={() => setSelectedWatchlistId(watchlist.id)}
+                className={`w-full px-standard py-4 text-left transition-colors ${selectedWatchlist?.id === watchlist.id ? "bg-primary/5" : "bg-surface hover:bg-surface-high"}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-on-surface">{watchlist.name}</p>
+                  <StatusBadge tone="default">{watchlist.itemCount}</StatusBadge>
                 </div>
-                <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
-                  {watchlist.itemCount} item{watchlist.itemCount === 1 ? "" : "s"}
-                </span>
-              </div>
+                <p className="mt-2 line-clamp-2 text-sm text-on-surface-variant">{watchlist.description || "No description"}</p>
+              </button>
+            ))}
+            {watchlists.length === 0 ? <div className="p-standard text-sm text-on-surface-variant">No watchlists created yet.</div> : null}
+          </div>
+        </Panel>
 
-              {watchlist.items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No items in this watchlist yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {watchlist.items.map((item) => (
-                    <div key={item.id} className="flex items-start justify-between gap-4 rounded-md border p-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded bg-muted px-2 py-0.5 text-xs uppercase text-muted-foreground">{item.itemType}</span>
-                          <p className="font-medium">
-                            {item.itemType === "token"
-                              ? item.token?.symbol || "Unknown Token"
-                              : item.wallet?.label || item.wallet?.classification || "Tracked Wallet"}
-                          </p>
+        <Panel title={selectedWatchlist?.name ?? "Watchlist Items"} icon={<WalletCards className="h-4 w-4" />}>
+          <div className="divide-y divide-outline">
+            {!selectedWatchlist || selectedWatchlist.items.length === 0 ? (
+              <div className="p-standard text-sm text-on-surface-variant">No items in the selected watchlist.</div>
+            ) : (
+              selectedWatchlist.items.map((item) => {
+                const title = item.itemType === "token"
+                  ? item.token?.symbol ? `$${item.token.symbol}` : "Unknown Token"
+                  : item.wallet?.label || item.wallet?.classification || "Tracked Wallet";
+                const href = item.itemType === "token" ? `/tokens/${item.itemAddress}` : "/wallets";
+                return (
+                  <div key={item.id} className="px-standard py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusBadge tone={item.itemType === "token" ? "success" : "warning"}>{item.itemType}</StatusBadge>
+                          <Link href={href} className="font-semibold text-on-surface hover:text-primary">{title}</Link>
                         </div>
-                        <p className="mt-1 font-mono text-xs text-muted-foreground">{item.itemAddress}</p>
-                        {item.itemType === "token" && item.token?.name ? (
-                          <p className="mt-1 text-xs text-muted-foreground">{item.token.name}</p>
-                        ) : null}
-                        {item.itemType === "wallet" && item.wallet ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {item.wallet.classification || "unknown"} • {item.wallet.totalTrades ?? 0} trades
-                          </p>
-                        ) : null}
-                        {item.note ? <p className="mt-2 text-sm">{item.note}</p> : null}
+                        <p className="mt-2 font-mono text-xs text-primary">{shortAddress(item.itemAddress, 10, 8)}</p>
+                        <p className="mt-2 text-sm text-on-surface-variant">
+                          {item.note || "No note"} - added {formatRelative(item.addedAt)}
+                        </p>
                       </div>
                       <button
-                        onClick={() => removeItem(watchlist.id, item.id)}
-                        className="rounded-md border px-2 py-1 text-xs hover:bg-muted/50"
+                        onClick={() => selectedWatchlist && removeItem(selectedWatchlist.id, item.id)}
+                        className="rounded-sm border border-outline bg-surface p-2 text-on-surface-variant hover:text-destructive"
+                        title="Remove item"
                       >
-                        Remove
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Panel>
+
+        <div className="space-y-4">
+          <Panel title="Create Watchlist" icon={<Plus className="h-4 w-4" />}>
+            <div className="space-y-3 p-standard">
+              <input value={newWatchlistName} onChange={(event) => setNewWatchlistName(event.target.value)} placeholder="Alpha candidates" className="h-10 w-full rounded-sm border border-outline bg-surface px-3 text-sm text-on-surface outline-none focus:border-primary" />
+              <input value={newWatchlistDescription} onChange={(event) => setNewWatchlistDescription(event.target.value)} placeholder="Description" className="h-10 w-full rounded-sm border border-outline bg-surface px-3 text-sm text-on-surface outline-none focus:border-primary" />
+              <button onClick={createWatchlist} className="w-full rounded-sm border border-primary/30 bg-primary-container px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-primary-foreground">Create</button>
             </div>
-          ))}
+          </Panel>
+
+          <Panel title="Add Item" icon={<Plus className="h-4 w-4" />}>
+            <div className="space-y-3 p-standard">
+              <AegisSelect
+                label="Watchlist"
+                value={selectedWatchlistId}
+                options={[
+                  { label: "Select watchlist", value: "" },
+                  ...watchlists.map((watchlist) => ({ label: watchlist.name, value: watchlist.id })),
+                ]}
+                onChange={setSelectedWatchlistId}
+              />
+              <AegisSelect
+                label="Item type"
+                value={itemType}
+                options={[
+                  { label: "Token", value: "token" },
+                  { label: "Wallet", value: "wallet" },
+                ]}
+                onChange={(value) => setItemType(value as "token" | "wallet")}
+              />
+              <input value={itemAddress} onChange={(event) => setItemAddress(event.target.value)} placeholder="Address" className="h-10 w-full rounded-sm border border-outline bg-surface px-3 font-mono text-sm text-on-surface outline-none focus:border-primary" />
+              <input value={itemNote} onChange={(event) => setItemNote(event.target.value)} placeholder="Note" className="h-10 w-full rounded-sm border border-outline bg-surface px-3 text-sm text-on-surface outline-none focus:border-primary" />
+              <button onClick={addItem} className="w-full rounded-sm border border-outline bg-surface-container px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface">Add Item</button>
+            </div>
+          </Panel>
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -21,6 +21,8 @@
     "@fastify/rate-limit": "^10.2.0",
     "@fastify/websocket": "^11.0.0",
     "@fastify/swagger": "^9.4.0",
+    "@solana/web3.js": "^1.98.0",
+    "drizzle-orm": "^0.38.0",
     "zod": "^3.24.0",
     "@fastify/type-provider-typebox": "^5.1.0",
     "@memecoin/config": "workspace:*",
@@ -31,6 +33,8 @@
     "@memecoin/notifications": "workspace:*",
     "@memecoin/queue": "workspace:*",
     "@memecoin/schemas": "workspace:*",
+    "@memecoin/solana": "workspace:*",
+    "dotenv": "^17.4.2",
     "tsx": "^4.19.0"
   },
   "devDependencies": {

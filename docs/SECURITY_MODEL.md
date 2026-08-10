@@ -1,97 +1,69 @@
 # Security Model
 
+## Scope
+
+The current product is a personal intelligence app without account sign-in. It is not a multi-user SaaS. Public market intelligence can be read without a session, while state changes and sensitive configuration are protected by a personal write key.
+
+## Current Access Rules
+
+- `GET /health`, status, scanner, token, dashboard, and research data remain readable.
+- Every `POST`, `PUT`, `PATCH`, and `DELETE` request requires either `x-aegis-write-key` or a valid signed API bearer token when `API_WRITE_TOKEN` is configured.
+- Settings and notification-destination reads also require the personal key because they may contain private routing details.
+- Production with `PERSONAL_APP_MODE=true` refuses to start without an `API_WRITE_TOKEN` of at least 32 characters.
+- The browser key is entered manually in Settings and stored in that browser's local storage. It is sent only in a request header over HTTPS and is never compiled into the frontend.
+- CORS must be restricted to the deployed frontend origin.
+- Expensive scan, wallet-discovery, and strategy-replay routes have stricter rate limits.
+
 ## Trust Boundaries
 
-```
-┌───────────────────────────────────────────────────┐
-│ UNTRUSTED                                          │
-│ Browser, Telegram, External APIs                   │
-├───────────────────────────────────────────────────┤
-│ BOUNDARY: Input Validation (Zod), Rate Limiting    │
-├───────────────────────────────────────────────────┤
-│ SEMI-TRUSTED                                       │
-│ API Server, Background Workers                     │
-├───────────────────────────────────────────────────┤
-│ BOUNDARY: Auth, Authorization, Encrypted Storage   │
-├───────────────────────────────────────────────────┤
-│ TRUSTED                                            │
-│ Database, Redis, Provider Credentials              │
-└───────────────────────────────────────────────────┘
+```text
+Untrusted browser and providers
+        |
+        | HTTPS, CORS, write key, rate limit, Zod validation
+        v
+Fastify API and background workers
+        |
+        | parameterized Drizzle queries, queue job contracts
+        v
+PostgreSQL, Redis, and provider credentials
 ```
 
-## Core Security Rules
+## Secret Rules
 
-### 1. Private Keys
-- **NEVER** stored in database
-- **NEVER** stored in application memory longer than transaction signing
-- **NEVER** logged or included in error reports
-- **NEVER** transmitted to server (client-side signing only)
-- User wallets connect via Solana Wallet Adapter (browser-side signing)
+- Provider keys, Telegram tokens, webhook credentials, database URLs, Redis URLs, signing secrets, and the personal write key belong in deployment environment variables only.
+- No secret may use a `NEXT_PUBLIC_` prefix.
+- No wallet private key or seed phrase may be stored, logged, or sent to the API.
+- Final Phase 3 must use browser-side wallet signing and explicit transaction review.
+- Rotate any credential that has been pasted into chat, logs, screenshots, or committed files.
 
-### 2. Secrets Management
-- API keys stored in environment variables only
-- No secrets in source code, logs, or error messages
-- Secrets never passed to browser/client
-- Development secrets are clearly marked and non-production
+## Browser-Key Limitations
 
-### 3. Input Validation
-- All external inputs validated with Zod schemas
-- SQL injection prevented by Drizzle ORM (parameterized queries)
-- XSS prevented by React's default escaping
-- CSRF protected by Auth.js token validation
+- Local storage is appropriate for this single-user personal boundary, but any successful same-origin script injection could read it.
+- Strong Content Security Policy, dependency review, React escaping, and avoiding third-party scripts reduce that risk.
+- Locking changes in Settings removes the key from that browser.
+- A public multi-user release would require real identity, per-user authorization, and server-side sessions. That is outside the current personal-app scope.
 
-### 4. Authentication
-- Auth.js with provider-neutral design
-- Session tokens stored in HTTP-only cookies
-- CSRF protection on all state-changing operations
-- Rate limiting on authentication endpoints
+## Data and Authorization
 
-### 5. Authorization
-- Users can only access their own data
-- API endpoints check ownership before returning data
-- Admin operations require elevated privileges
-- Development-only features disabled in production
+- Public Solana wallet and token addresses are not secrets, but watchlist notes, notification destinations, and operator preferences should be treated as private.
+- Development user fallback is allowed only in development/test or explicit personal mode.
+- Development ingestion routes remain unavailable in production.
+- Trading stays disabled until the final security review and Phase 3 gate.
 
-### 6. Rate Limiting
-- Per-IP rate limiting on public endpoints
-- Per-user rate limiting on authenticated endpoints
-- Expensive operations (scoring, ingestion) have lower limits
-- Rate limit headers returned in responses
+## Operational Checklist
 
-### 7. Data Protection
-- Sensitive data encrypted at rest (future)
-- PII minimized (only necessary data collected)
-- Data retention policies enforced
-- Audit logging for security-sensitive operations
-
-## Security-Sensitive Decisions
-
-| Decision | Risk | Mitigation |
-|----------|------|------------|
-| Non-custodial trading | Low (user controls keys) | Clear UX around signing |
-| Storing wallet addresses | Medium (public but linked) | No balance/position exposure without auth |
-| Telegram integration | Medium (chat ID exposure) | Linking requires user action |
-| Provider API keys | High (financial access) | Environment variables only |
-| Development auth mode | High (if leaked to prod) | Feature flag + environment check |
-
-## Vulnerability Response
-
-1. **Discovery**: Report via secure channel (not public issues)
-2. **Assessment**: Evaluate severity and impact
-3. **Fix**: Implement fix in private branch
-4. **Deploy**: Deploy fix to production
-5. **Disclose**: Inform affected users if data was compromised
-6. **Review**: Post-mortem and prevention measures
-
-## Security Checklist
-
-- [ ] No secrets in source code
-- [ ] No private keys in database
-- [ ] All inputs validated with Zod
-- [ ] Rate limiting on expensive endpoints
-- [ ] Auth checks on all protected routes
-- [ ] CORS configured correctly
-- [ ] HTTPS enforced in production
-- [ ] Security headers configured
-- [ ] Development features disabled in production
-- [ ] Error messages don't leak internals
+- [x] Inputs validated with Zod on primary API surfaces
+- [x] Parameterized database access through Drizzle
+- [x] Global and expensive-route rate limiting
+- [x] Fail-closed production personal write key
+- [x] Sensitive settings reads protected
+- [x] No frontend-bundled API write secret
+- [x] Container runs as non-root
+- [x] Development ingestion disabled in production
+- [ ] Set and rotate production `API_WRITE_TOKEN`
+- [ ] Restrict production `CORS_ORIGIN` to the exact Vercel domain
+- [x] Add CSP, anti-framing, referrer, MIME, and permissions headers in the web configuration
+- [ ] Verify security headers on the deployed frontend
+- [ ] Verify HTTPS on frontend and API custom domains
+- [ ] Run dependency and secret scanning in CI
+- [ ] Complete a final Phase 3 wallet/signing threat model

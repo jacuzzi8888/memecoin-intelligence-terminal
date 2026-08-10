@@ -22,6 +22,7 @@
     "@memecoin/notifications": "workspace:*",
     "@memecoin/schemas": "workspace:*",
     "@memecoin/queue": "workspace:*",
+    "drizzle-orm": "^0.38.0",
     "tsx": "^4.19.0"
   },
   "devDependencies": {

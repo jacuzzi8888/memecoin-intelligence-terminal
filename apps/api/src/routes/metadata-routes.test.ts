@@ -167,6 +167,7 @@ function createFakeDb(fixtures: Fixtures) {
 }
 
 const tokenAddress = "Mint111111111111111111111111111111111111111";
+const walletAddress = "GcETuWju2zbxZcEBf1iVH4XWpwfDjm2YUq6bFQnQwXVE";
 const snapshotAt = new Date("2026-07-26T10:00:00.000Z");
 const launchedAt = new Date("2026-07-26T09:55:00.000Z");
 const detectedAt = new Date("2026-07-26T09:58:00.000Z");
@@ -184,7 +185,7 @@ const fixtures: Fixtures = {
   }],
   wallets: [{
     id: "wallet-1",
-    address: "Wallet11111111111111111111111111111111111111",
+    address: walletAddress,
   }],
   tokenSnapshots: [{
     tokenId: "token-1",
@@ -399,7 +400,7 @@ describe("API metadata routes", () => {
     });
     expect(payload.data.system).toMatchObject({
       environment: "test",
-      version: "0.1.0",
+      version: "0.2.0",
       dataSourceSummary: "birdeye",
     });
     expect(payload.data.recentSignals[0]).toMatchObject({

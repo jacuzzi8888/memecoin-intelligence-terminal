@@ -1,115 +1,75 @@
 # Current State
 
-**Last Updated**: 2026-07-27
-**Phase**: Phase 2 - Live Data Integration (Completed)
-**Status**: Core monorepo is operational, provider-backed discovery and market-data plumbing are live, supervised stream ingestion and automated wallet sync now run as always-on services, alert delivery supports persisted destinations, and the core Phase 2 product surfaces are backed by persisted runtime data.
+**Last Updated**: 2026-08-10
+**Current Phase**: Phase 2.6, evidence accumulation and strategy proof
+**Deployment State**: The fixes below are implemented and validated in the workspace. The new migration, API write key, and service settings are not live until an approved production rollout is performed.
 
-## What Works
+## Product State
 
-### Infrastructure
-- Docker Compose for PostgreSQL 16 on port 5433 and Redis 7
-- Drizzle migrations and development seeding
-- Turborepo and pnpm workspace scripts
-- Repo-wide typechecking across all 20 packages
-- Repo-wide unit test command completes without failing packages that do not yet define local test files
+- The Aegis Terminal UI covers dashboard, scanner, research, token dossiers, alerts, wallets, watchlists, strategies, terminal preparation, and settings.
+- Market discovery polls every 15 seconds by default and processes up to 150 candidates per pass with overlap protection.
+- Every discovered token receives a deduplicated `system-market-scan` observation so the scanner can show the broad observed market.
+- Alerts are separate from market observations. An alert is created only when an active versioned strategy actually matches.
+- Scanner filters support timeframe, liquidity, market cap, volume, pair age, source, discovery source, priority, wallet evidence, qualified wallets, bundler exclusion, score, and text search.
+- Research is an evidence workbench backed by current scanner observations, not a placeholder.
+- Token and terminal surfaces do not draw synthetic price charts or show fabricated quotes, fees, TPS, gas, or latency.
+- Phase 3 trading remains disabled. No quote, signing, simulation, or transaction submission path is presented as live.
 
-### API and Data Access
-- Fastify API server with health, status, scanner, token, alerts, and dev ingest routes
-- Zod validation, CORS, request IDs, and structured logging
-- Alerts route now joins strategies through the actual foreign key
-- Scanner and token-detail APIs now derive `dataSource` and `dataFreshness` from persisted signal, launch, and snapshot metadata
-- Scanner filtering now correctly applies `minScore` and `priority` constraints to both result and count queries
-- Status responses now include queue depth, dead-letter depth, and background-job counts for raw-event, alert-delivery, and wallet-sync workers
+## Intelligence State
 
-### Provider Layer
-- Solana RPC provider with transaction parsing
-- Helius provider wiring for token discovery and wallet history when `HELIUS_API_KEY` is set
-- DexScreener market data provider available by default
-- Birdeye market data provider available when `BIRDEYE_API_KEY` is set
-- Provider registry fallback logic for missing paid-provider credentials
-- Shared token discovery service and repository abstraction used by the indexer command path
+- `token-signal-v0.2.0` produces non-saturated signed scores with missing-data confidence penalties.
+- `token-risk-v0.2.0` returns `unknown` when evidence coverage is insufficient rather than treating missing evidence as safety.
+- Strategy evaluation uses one canonical engine in discovery, raw-event processing, and backtesting.
+- Legacy strategy fields are normalized into strict all-required conditions. Empty strategies cannot match.
+- Signal refreshes require a cooldown plus a material score or priority change, reducing duplicate rows and alerts.
+- Alert outcomes are measured on 5m, 15m, 1h, 4h, and 24h windows, including 24h adverse excursion and maximum return.
+- Strategy graduation remains blocked until enough completed outcomes, wallet coverage, and manual reviews exist.
 
-### Intelligence Logic
-- Deterministic token scoring with explainable factor output
-- Token risk scoring with versioned risk factors persisted onto signal metadata
-- Wallet classification heuristics for bot, insider, bundler, sniper, whale, and related labels
-- Wallet scoring and qualification rules persisted onto wallet metadata and performance snapshots
-- Discovery and raw-event processing now evaluate all active strategies against their current versioned config instead of hard-coding a single default strategy
-- Unit tests for scoring, notification formatting, Solana provider behavior, and shared token discovery orchestration
+## Runtime State
 
-### Product Surfaces
-- Next.js web app with dashboard, scanner, alerts, token detail, watchlists, wallets, settings, and terminal routes
-- Settings UI now manages notification destinations and persisted strategies in addition to JSON preferences
-- Telegram bot commands for `/start`, `/help`, `/status`, `/alerts`, and `/scan`
-- Development ingestion commands for sample events, token discovery, wallet ingestion, and wallet classification
+- Fastify API, PostgreSQL, Redis/BullMQ, indexer, processor, wallet worker, and alert worker are implemented.
+- The always-on indexer can embed the processor and alert consumer for a low-cost single-service deployment.
+- Alert delivery performs a recovery pass on startup, consumes queue jobs, and records delivered, skipped, or failed destinations.
+- Alert outcome backfill runs every 15 minutes by default.
+- API status reports data freshness, pending alerts, queue depth, dead letters, and persisted entity counts.
+- Database migration `0004_sudden_baron_zemo.sql` adds query indexes, the market observation strategy, corrected strategy configs, and supersedes invalid legacy alerts.
+- The container runs as a non-root user and supports `api`, `indexer`, `processor`, and `alerts` roles.
 
-### Trading
-- Trading terminal UI shell exists
-- Swap quote and execution providers still use development fallbacks
-- No wallet connection or transaction submission flow is enabled
+## Access Model
 
-### Notifications
-- Telegram formatting is implemented
-- Alerts worker now routes through persisted destinations and can deliver to Telegram, Discord webhooks, or the development outbox
-- Discord, email, web push, and WhatsApp are not implemented
+- This is a personal app and has no account sign-in flow.
+- Public market reads remain available.
+- When `API_WRITE_TOKEN` is configured, every mutation requires `x-aegis-write-key` or a valid signed service token.
+- Settings and notification destination reads also require the personal key.
+- The key is entered in Settings and stored only in that browser's local storage. It is not included in the web bundle.
+- Production personal mode fails closed at startup if `API_WRITE_TOKEN` is absent.
 
-### Workers and Background Processing
-- Indexer commands exist and raw provider events can be stored
-- Shared ingestion pipeline now stores raw events and enqueues processor work through BullMQ for development-triggered flows
-- Shared discovery logic now persists provider provenance into launches and signals
-- Processor service now consumes queue jobs, normalizes pending raw token-launch events, and enqueues downstream alert-delivery work
-- Alerts service now consumes alert-delivery queue jobs into persisted deliveries and marks alerts delivered, suppressed, or failed based on routing outcome
-- Wallet ingestion and wallet classification now share a reusable wallet-intelligence pipeline that is callable from CLI commands, the API queue path, and the automated wallet sync worker
-- Indexer runtime now starts a supervised transaction-stream ingestion loop and a periodic stale-wallet sync scheduler
-- Queue lifecycle is mirrored into `background_jobs`, worker retries move through persisted statuses, and terminal failures are mirrored into dead-letter queues
+## Data Sources
 
-## What Is Still Seeded or Stubbed
-
-- Some watchlist and settings data still starts from seeded development users until full auth is wired
-- Telegram delivery is limited by missing credentials in local development
-- Swap quotes and execution are stubbed
-- Some wallet and holder enrichment paths fall back to development behavior when provider credentials are missing
+- DexScreener provides current profiles, boosts, pair metadata, and fallback market data.
+- Helius provides Solana RPC, token metadata, holder samples, stream events, and wallet history when configured and available.
+- Birdeye enriches market data when a key is configured.
+- The current free discovery set is not a complete firehose of every Solana token launch. Coverage must be measured rather than inferred from poll frequency.
 
 ## Validation Snapshot
 
-```bash
-pnpm typecheck   # passes across 20 packages
-pnpm test:unit   # passes across the workspace
-```
+Verified in the current workspace:
 
-Implemented unit tests currently cover:
-- intelligence scoring
-- token-risk and wallet-score rulesets
-- notification formatters
-- Solana providers and registry behavior
-- shared token discovery orchestration
-- shared ingestion pipeline queue orchestration
-- stream event to ingestion handoff
-- API route metadata behavior for scanner, token detail, alerts, and dashboard
-- API route behavior for watchlists, wallets, settings, and wallet sync
-- raw-event processor and alert-delivery worker behavior
+- API, web, indexer, processor, database, and intelligence TypeScript checks
+- Repository-wide ESLint checks, including Next.js core web vitals and React hooks
+- API unit tests, including personal write access
+- Intelligence unit tests, including strict strategy and uncertainty-aware risk behavior
+- Indexer unit tests, including market observation without false alerts
+- Web unit tests for personal-key request handling
+- Optimized Next.js production build for all 13 routes
+- CI workflow for frozen install, lint, typecheck, unit tests, and web build
 
-## Known Gaps
+## Remaining Gates
 
-- No live trading execution
-- No production auth provider configuration
-- Web push, email, and WhatsApp notification channels are not implemented
-
-## Required Environment Variables
-
-Required:
-- `DATABASE_URL`
-- `REDIS_URL`
-- `NEXTAUTH_SECRET`
-
-Optional:
-- `TELEGRAM_BOT_TOKEN`
-- `HELIUS_API_KEY`
-- `BIRDEYE_API_KEY`
-
-## Next Recommended Tasks
-
-1. Start Phase 3 by wiring real Jupiter quote retrieval and execution into the trading terminal.
-2. Add wallet connection and explicit signing flows for non-custodial execution.
-3. Extend notifications to web push and richer end-user channel management once auth is fully wired.
-4. Harden production auth and multi-user session configuration.
+- Apply migration `0004_sudden_baron_zemo.sql` to production.
+- Set a strong `API_WRITE_TOKEN` on the production API and enter the same value in the deployed app Settings page.
+- Deploy the updated API, indexer, and web app, then verify the live URLs.
+- Accumulate enough fresh wallet-enriched snapshots and reviewed alert outcomes to evaluate strategy edge.
+- Improve launch coverage beyond DexScreener profiles/boosts if near-firehose coverage is required.
+- Complete performance/load testing and targeted caching after real dataset growth is observed.
+- Start final Phase 3 only after the evidence gate passes.

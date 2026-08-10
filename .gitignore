@@ -53,3 +53,5 @@ secrets/
 *.network-request
 *.network-response
 *.heapsnapshot
+
+.vercel

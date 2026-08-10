@@ -1,53 +1,55 @@
 # Known Issues
 
-### KI-002: Trading terminal remains read-only
+## Open
+
+### KI-001: Workspace fixes are not deployed yet
+**Severity**: High
+The migration, write key, worker embedding, 15-second polling, corrected strategy behavior, and UI changes exist in the workspace only. Production remains on the previous release until an approved rollout is performed.
+
+### KI-002: Launch coverage is not a complete Solana firehose
+**Severity**: High
+DexScreener profiles and boosts are useful current discovery feeds, but they do not represent every token launched. Helius stream reliability and exact launch coverage still need production measurement. A 15-second loop improves freshness, not source completeness.
+
+### KI-003: Strategy edge is not proven
+**Severity**: High
+The scoring, backtest, outcome, review, and evidence-gate mechanisms are implemented, but the app has not accumulated enough fresh wallet-enriched history and manual reviews to justify trading.
+
+### KI-004: Wallet evidence is still sparse
+**Severity**: Medium
+Wallet discovery and qualification work, but only a subset of observed candidates has qualified-wallet evidence. This limits confidence and correctly produces `unknown` risk on many tokens.
+
+### KI-005: External notifications require credentials
+**Severity**: Medium
+Telegram and Discord delivery code is implemented, but real delivery requires a valid bot token or webhook plus an enabled destination. The recovery worker cannot prove an external channel without those credentials.
+
+### KI-006: Provider quality depends on credentials and quotas
+**Severity**: Medium
+Helius and Birdeye improve metadata, holders, RPC reliability, and wallet history. Missing keys, free-tier quotas, or provider errors reduce evidence coverage. DexScreener remains the free fallback.
+
+### KI-007: Hot-path caching is not implemented
+**Severity**: Low
+Database indexes now cover scanner, strategy, alert, snapshot, wallet, and outcome access patterns. Redis response caching should be added only after production measurements identify the actual hot queries.
+
+### KI-008: Automated browser coverage is limited
+**Severity**: Low
+The web app has unit and production-build coverage, but repeatable end-to-end tests should be expanded for mobile layouts, scanner filtering, unlock behavior, and degraded API states.
+
+### KI-009: Trading is intentionally unavailable
 **Severity**: Expected
-**Description**: The trading UI exists, but quote retrieval, wallet connection, and execution are not enabled.
-**Impact**: Users can inspect the interface but cannot complete trading workflows.
-**Resolution**: Implement swap quote provider, wallet integration, simulation, and transaction submission.
+The terminal is preparation-only. Jupiter quotes, wallet connection, simulation, signing, execution, and position controls belong to final Phase 3 after the evidence gate passes.
 
-### KI-003: Live external delivery still depends on credentials
-**Severity**: Medium
-**Description**: Telegram and Discord delivery paths are implemented, but they require valid bot tokens or webhook destinations to deliver outside the development outbox.
-**Impact**: Local demos without credentials fall back to the dev outbox and do not prove real external delivery.
-**Resolution**: Configure real destination credentials and validate end-to-end delivery in the target environment.
+## Resolved in Workspace
 
-### KI-004: Optional provider credentials gate the best data paths
-**Severity**: Medium
-**Description**: Helius and Birdeye-backed behavior depends on optional API keys.
-**Impact**: Local environments without those keys fall back to weaker or seeded behavior.
-**Resolution**: Configure `HELIUS_API_KEY` and `BIRDEYE_API_KEY`, then validate the live flows against real traffic.
-
-### KI-005: Workspace tests were previously noisy
-**Severity**: Resolved in current workspace
-**Description**: `pnpm test:unit` used to fail when a package had no local test files.
-**Impact**: Repo-wide test status was misleading.
-**Resolution**: Package `vitest` scripts now use `--passWithNoTests`.
-
-### KI-006: API route coverage is still selective
-**Severity**: Low
-**Description**: Route-level tests now cover scanner, token detail, alerts, dashboard, watchlists, wallets, settings, and wallet-sync queueing happy paths, but pagination edges and broader negative-path coverage are still incomplete.
-**Impact**: Regressions in other endpoints or more complex query behavior could still slip through without direct route tests.
-**Resolution**: Expand API tests to cover status, dev ingestion, pagination edges, and negative-path error handling.
-
-## Architecture Limitations
-
-### KI-011: No production auth configuration
-**Severity**: Low
-**Description**: The codebase is prepared for auth, but external OAuth providers are not configured.
-**Impact**: The app is not production-ready for multi-user authentication.
-**Resolution**: Configure real auth providers and verify secure session handling.
-
-### KI-012: Query and caching strategy is still early-stage
-**Severity**: Low
-**Description**: The API currently favors straightforward database reads over an optimized caching strategy.
-**Impact**: Performance may degrade once the dataset grows.
-**Resolution**: Add targeted indexes, query review, and Redis caching for hot paths.
-
-## Operational Notes
-
-### KI-020: Public Solana RPC can still rate-limit aggressively
-**Severity**: Medium
-**Description**: Public RPC endpoints may return 429 responses during heavier discovery or parsing workloads.
-**Impact**: Discovery and enrichment can become unreliable without provider-backed access.
-**Resolution**: Prefer Helius-backed RPC for repeatable development and production usage.
+- Signal scores no longer saturate at 100.
+- Empty or weak legacy strategies no longer create alerts.
+- Scanner market observations are separated from strategy matches.
+- Duplicate signal emission now requires material change and cooldown expiry.
+- Risk no longer treats missing evidence as low risk.
+- Scanner text, timeframe, liquidity, volume, market-cap, pair-age, wallet, source, and bundler filters are functional.
+- Generic browser selects were replaced by the Aegis custom select component.
+- The Research route is functional.
+- Static TPS, gas, latency, fake risk labels, and synthetic charts were removed.
+- Personal production mutations and settings reads are protected without account sign-in.
+- The alert queue now has an embedded always-on consumer and startup recovery pass.
+- Scheduled alert outcome measurement is enabled.
+- Query indexes and CI validation were added.

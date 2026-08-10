@@ -8,6 +8,34 @@
       "when": 1784629894937,
       "tag": "0000_jittery_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785707776236,
+      "tag": "0001_slippery_firedrake",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785709084845,
+      "tag": "0002_odd_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786288500000,
+      "tag": "0003_seed_system_strategies",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786329682311,
+      "tag": "0004_sudden_baron_zemo",
+      "breakpoints": true
     }
   ]
 }

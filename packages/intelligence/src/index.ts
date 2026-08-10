@@ -1,8 +1,12 @@
-export { calculateSignalScore, RULESET_VERSION, WEIGHTS } from "./scoring/index.js";
-export type { ScoreInput, ScoringResult, FactorContribution } from "./scoring/index.js";
+export { calculateSignalScore, getSignalPriority, RULESET_VERSION, WEIGHTS } from "./scoring/index.js";
+export type { ScoreInput, ScoringResult, FactorContribution, SignalPriority } from "./scoring/index.js";
 export { WalletClassifier, RULESET_VERSION as CLASSIFIER_VERSION } from "./classification/index.js";
 export type { WalletClassification, ClassificationInput, ClassificationResult } from "./classification/index.js";
-export { calculateWalletScore, WALLET_SCORE_RULESET_VERSION, DISQUALIFYING_CLASSIFICATIONS } from "./wallet-scoring/index.js";
-export type { WalletScoreInput, WalletScoreFactor, WalletScoreResult } from "./wallet-scoring/index.js";
-export { calculateTokenRiskScore, TOKEN_RISK_RULESET_VERSION } from "./token-risk/index.js";
-export type { TokenRiskInput, TokenRiskFactor, TokenRiskResult } from "./token-risk/index.js";
+export { WalletScorer, WALLET_SCORE_VERSION, calculateWalletScore, DISQUALIFYING_CLASSIFICATIONS } from "./wallet-scoring/index.js";
+export type { WalletScoreInput, WalletScoreResult, CalculateWalletScoreInput, CalculateWalletScoreResult, WalletScoreFactor } from "./wallet-scoring/index.js";
+export { TokenRiskScorer, TOKEN_RISK_VERSION, calculateTokenRiskScore } from "./token-risk/index.js";
+export type { TokenRiskInput, TokenRiskResult, CalculateTokenRiskScoreInput, CalculateTokenRiskScoreResult, TokenRiskFactor } from "./token-risk/index.js";
+export { StrategyEngine, STRATEGY_ENGINE_VERSION, toRuntimeStrategyConfig } from "./strategy-engine/index.js";
+export type { RuntimeStrategyRecord, StrategyConfig, StrategyCondition, StrategyEvaluationInput, StrategyEvaluationResult } from "./strategy-engine/index.js";
+export { EVIDENCE_GATE_THRESHOLDS, replayStrategy } from "./backtesting/index.js";
+export type { BacktestEntry, BacktestOptions, BacktestResult, BacktestSnapshot } from "./backtesting/index.js";

@@ -68,7 +68,7 @@ async function runProcessorPass(jobData?: RawEventProcessingJobData) {
   return result;
 }
 
-async function runProcessorService() {
+export async function runProcessorService() {
   createWorker<RawEventProcessingJobData>(RAW_EVENT_PROCESSING_QUEUE, async (job) => {
     const bullJobId = job.id ? String(job.id) : null;
     const db = getDb();

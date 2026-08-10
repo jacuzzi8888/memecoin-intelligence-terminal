@@ -33,8 +33,8 @@ async function runAlertsPass(jobData?: AlertDeliveryJobData) {
   return result;
 }
 
-async function runAlertsService() {
-  createWorker<AlertDeliveryJobData>(ALERT_DELIVERY_QUEUE, async (job) => {
+export async function runAlertsService() {
+  const worker = createWorker<AlertDeliveryJobData>(ALERT_DELIVERY_QUEUE, async (job) => {
     const bullJobId = job.id ? String(job.id) : null;
     const db = getDb();
 
@@ -78,7 +78,7 @@ async function runAlertsService() {
     "Alerts service started",
   );
 
-  if (process.env.ALERTS_RUN_RECOVERY_PASS === "true") {
+  if (process.env.ALERTS_RUN_RECOVERY_PASS !== "false") {
     const result = await runAlertsPass({
       limit: DEFAULT_BATCH_SIZE,
       trigger: "recovery",
@@ -88,6 +88,8 @@ async function runAlertsService() {
       log.info(result, "Alerts recovery pass complete");
     }
   }
+
+  return worker;
 }
 
 const entryPath = process.argv[1] ? resolve(process.argv[1]) : null;

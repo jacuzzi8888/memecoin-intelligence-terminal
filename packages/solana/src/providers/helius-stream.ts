@@ -33,7 +33,6 @@ export class HeliusStreamProvider implements ITransactionStreamProvider {
   private pendingSubscribeRequests = new Map<string, PendingSubscribeRequest>();
   private connected = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
   private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -82,11 +81,9 @@ export class HeliusStreamProvider implements ITransactionStreamProvider {
       close,
     });
 
-    const wasAlreadyConnected = this.connected && this.ws;
-    await this.ensureConnected();
-    if (wasAlreadyConnected) {
-      this.subscribeFilters(subscriptionId, filters);
-    }
+    // Keep the local subscription alive while the provider reconnects. The
+    // socket's onopen handler resubscribes all active filters once available.
+    void this.ensureConnected().catch(() => undefined);
 
     return {
       subscriptionId,
@@ -241,7 +238,6 @@ export class HeliusStreamProvider implements ITransactionStreamProvider {
         log.info("Helius WebSocket disconnected");
 
         if (this.subscriptions.size === 0) return;
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
 
         this.reconnectAttempts++;
         const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);

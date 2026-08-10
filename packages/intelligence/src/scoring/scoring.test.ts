@@ -19,11 +19,12 @@ describe("calculateSignalScore", () => {
     const result = calculateSignalScore(baseInput);
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.score).toBeLessThanOrEqual(100);
+    expect(result.score).toBe(70);
   });
 
   it("returns the correct ruleset version", () => {
     const result = calculateSignalScore(baseInput);
-    expect(result.rulesetVersion).toBe("token-signal-v0.1.0");
+    expect(result.rulesetVersion).toBe("token-signal-v0.2.0");
   });
 
   it("returns a confidence between 0 and 1", () => {
@@ -76,13 +77,47 @@ describe("calculateSignalScore", () => {
   it("gives higher score for early tokens with good liquidity", () => {
     const early = calculateSignalScore({ ...baseInput, tokenAge: 2, liquidityUsd: 5000, holderCount: 50 });
     const late = calculateSignalScore({ ...baseInput, tokenAge: 300, liquidityUsd: 5000, holderCount: 50 });
-    expect(early.score).toBeGreaterThanOrEqual(late.score);
+    expect(early.score).toBeGreaterThan(late.score);
   });
 
   it("gives higher score for more qualified wallets", () => {
     const few = calculateSignalScore({ ...baseInput, qualifiedWalletCount: 0, liquidityUsd: 5000 });
     const many = calculateSignalScore({ ...baseInput, qualifiedWalletCount: 5, liquidityUsd: 5000 });
-    expect(many.score).toBeGreaterThanOrEqual(few.score);
+    expect(many.score).toBeGreaterThan(few.score);
+  });
+
+  it("does not promote sparse market evidence to a perfect score", () => {
+    const result = calculateSignalScore({
+      tokenAge: 2,
+      liquidityUsd: 0,
+      volume1hUsd: 22_000,
+      holderCount: null,
+      qualifiedWalletCount: null,
+      bundledSupplyPct: null,
+      deployerRisk: null,
+      topHolderConcentration: null,
+      lpLocked: null,
+    });
+
+    expect(result.score).toBe(38);
+    expect(result.confidence).toBe(0.38);
+  });
+
+  it("subtracts negative factors instead of turning them into positive score", () => {
+    const result = calculateSignalScore({
+      tokenAge: 300,
+      liquidityUsd: 0,
+      volume1hUsd: 0,
+      holderCount: 0,
+      qualifiedWalletCount: 0,
+      bundledSupplyPct: 50,
+      deployerRisk: 80,
+      topHolderConcentration: 70,
+      lpLocked: false,
+    });
+
+    expect(result.score).toBe(0);
+    expect(result.negativeFactors.length).toBeGreaterThan(0);
   });
 
   it("includes calculatedAt timestamp", () => {

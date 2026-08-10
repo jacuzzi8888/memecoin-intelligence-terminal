@@ -71,16 +71,16 @@
 **Reason**: grammY is modern, fully typed, has good middleware system, and active maintenance.
 **Consequences**: Newer framework, smaller community than Telegraf.
 
-## DEC-007: Development auth mode
+## DEC-007: Local single-user mode
 
 **Date**: 2026-07-21
-**Decision**: Allow development login without external OAuth
-**Context**: Need to test authenticated flows without configuring Google/GitHub OAuth
+**Decision**: Run the local app as a single-user workspace without an OAuth prompt
+**Context**: This installation is personal and runs on localhost; external identity adds friction without providing local value.
 **Alternatives considered**:
-- Require OAuth for all environments: Blocks local development
-- Mock auth entirely: Less realistic testing
-**Reason**: Development mode (ENABLE_DEV_AUTH=true) allows testing authenticated flows locally. Clearly isolated from production via feature flag and environment check.
-**Consequences**: Must ensure dev auth is never enabled in production. Clear separation in code.
+- Require OAuth locally: Unnecessary for a single operator
+- Remove all server-side authorization: Unsafe if the app is later exposed
+**Reason**: Local development uses a single development user automatically. Personal production uses a browser-entered write key so state changes fail closed without adding account friction.
+**Consequences**: Public market reads remain available, mutations and sensitive settings require the key, and a real identity provider is required only if the product becomes multi-user.
 
 ## DEC-008: Append-only raw data
 

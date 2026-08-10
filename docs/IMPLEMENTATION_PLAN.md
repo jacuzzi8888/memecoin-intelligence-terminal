@@ -1,113 +1,102 @@
 # Implementation Plan
 
-## Phase 1: Foundation (Completed)
+Phase 3 is the final phase. All intelligence, evidence, reliability, and production-hardening work must finish before trading begins.
 
-### Completed
-- [x] Monorepo structure (Turborepo + pnpm)
-- [x] TypeScript configuration
-- [x] Package structure (all packages and services)
-- [x] Root configuration (prettier, linting, scripts)
-- [x] Project documentation baseline
-- [x] Infrastructure setup (Docker Compose: PostgreSQL, Redis)
-- [x] Database schema (Drizzle ORM, migrations)
-- [x] Shared contracts (Zod schemas, provider interfaces)
-- [x] Vertical slice implementation
-- [x] API server (Fastify with endpoints)
-- [x] Web application (Next.js with working pages)
-- [x] Telegram bot foundation
-- [x] Workspace validation commands that complete cleanly
+## Phase 1: Foundation
 
-### Status: COMPLETE
+**Status**: Complete
 
-## Phase 2: Live Data Integration (Completed)
+- Monorepo, TypeScript, pnpm, Turborepo, shared packages, and service boundaries
+- PostgreSQL/Drizzle schema and migrations
+- Redis/BullMQ queue foundation
+- Fastify API, Next.js web app, provider interfaces, logging, and validation
 
-### Completed in Current Workspace
-- [x] Helius-backed provider wiring through the Solana provider registry
-- [x] Birdeye market data provider integration
-- [x] Shared token discovery service extracted for reuse by the indexer command path
-- [x] Scanner and token-detail APIs expose persisted provider provenance and freshness metadata
-- [x] Dashboard API now exposes live overview, queue-state, and recent activity from persisted records
-- [x] Watchlists, wallets, and settings surfaces now consume persisted API data instead of placeholder Phase 2 copy
-- [x] Processor service consumes pending raw token-launch events into normalized entities, signals, and pending alerts
-- [x] Alerts service performs development-log delivery for pending alerts and records delivery rows
-- [x] Shared dev-ingest API and sample-ingestion command now use the same raw-event -> processor -> alerts path
-- [x] Shared dev-ingest flow now uses BullMQ handoff, and processor-to-alert orchestration is queued instead of inline polling-only execution
-- [x] Wallet ingestion and wallet classification now share a reusable pipeline callable from CLI commands and the API
-- [x] Runtime signal generation now evaluates all active strategies against their current versioned config
-- [x] Initial transaction-stream ingestion path now feeds streamed token events into the shared raw-event queue pipeline
-- [x] Queue lifecycle is mirrored into persisted background-job records and surfaced in API status responses
-- [x] Real-time transaction streaming promoted from command path into a supervised always-on ingestion service
-- [x] Wallet history ingestion promoted from manual/API-triggered shared pipeline into an automated background pipeline
-- [x] Full wallet scoring and qualification engine
-- [x] Full token risk scoring beyond the current deterministic slice
-- [x] Production-grade queue retries, monitoring, and worker supervision
-- [x] Bot detection algorithms
-- [x] Insider detection algorithms
-- [x] Bundler detection algorithms
-- [x] Multiple strategy support in runtime evaluation
-- [x] Full user-configurable strategies beyond the current development settings surface
+## Phase 2.1: Live Data and Product Surfaces
 
-### Status: COMPLETE
+**Status**: Complete in the workspace
 
-### Estimated Duration: 4-6 weeks
+- Helius, DexScreener, Birdeye, and Solana RPC provider paths
+- Dashboard, scanner, research, token, alerts, wallets, watchlists, strategies, terminal, and settings pages
+- Current-token discovery, market snapshots, source provenance, freshness, wallet history, and holder samples
+- Custom Aegis controls and responsive desktop/mobile shell
 
-## Phase 3: Trading & Telegram (Current Next Phase)
+## Phase 2.5: Reliability and Signal Integrity
 
-### Planned
-- [ ] Jupiter integration (quotes + execution)
-- [ ] Solana Wallet Adapter integration
-- [ ] Transaction simulation
-- [ ] Non-custodial trade execution
-- [ ] Trade outcome tracking
-- [ ] Full Telegram bot (account linking, watchlists, settings)
-- [ ] Telegram trading commands (simulated first)
-- [ ] Discord notification channel
-- [ ] Web push notifications
+**Status**: Implementation complete; production rollout pending
 
-### Estimated Duration: 4-6 weeks
+- [x] Non-saturated signed scoring
+- [x] Unknown risk for incomplete evidence
+- [x] Canonical versioned strategy engine across live processing and replay
+- [x] Strict legacy strategy normalization
+- [x] Broad market observations separated from alerts
+- [x] Material-change and cooldown signal deduplication
+- [x] 15-second discovery schedule with overlap protection
+- [x] 150-candidate manual and scheduled scan capacity
+- [x] Functional scanner filters and text search
+- [x] Query indexes for primary read/write paths
+- [x] Personal write key and sensitive-settings protection
+- [x] Embedded alert delivery consumer and recovery pass
+- [x] Scheduled alert outcome backfill
+- [x] CI workflow and frontend unit coverage
+- [ ] Deploy, migrate, and verify the updated production stack
+- [ ] Measure provider coverage, quotas, freshness, and failure rates for at least seven continuous days
 
-## Phase 4: Advanced Intelligence
+## Phase 2.6: Evidence and Strategy Proof
 
-### Planned
-- [ ] Wallet clustering algorithms
-- [ ] Funding relationship detection
-- [ ] Historical backtesting engine
-- [ ] Strategy optimization
-- [ ] Launch fingerprinting
-- [ ] Historical similarity matching
-- [ ] Graph explorer (basic)
-- [ ] Custom strategy builder UI
-- [ ] ML-enhanced scoring (experimental)
+**Status**: Mechanisms complete; evidence accumulation in progress
 
-### Estimated Duration: 6-8 weeks
+- [x] Multi-window alert outcomes
+- [x] Return, win rate, MAE, maximum return, and failure classes
+- [x] Historical strategy replay with coverage reporting
+- [x] Manual false-positive review workflow
+- [x] Evidence gate for strategy graduation
+- [x] Wallet-enriched snapshots and qualified-wallet conditions
+- [ ] Accumulate enough completed 24h outcomes for each candidate strategy
+- [ ] Review enough alerts to estimate false-positive rate
+- [ ] Demonstrate acceptable return, drawdown, coverage, and failure-class results
+- [ ] Disable or revise strategies that fail the gate
 
-## Phase 5: Scale & Polish
+## Phase 2.7: Coverage and Operator Value
 
-### Planned
-- [ ] Performance optimization
-- [ ] Caching strategy implementation
-- [ ] Read replica support
-- [ ] Advanced monitoring and alerting
-- [ ] Mobile-responsive bottom navigation
-- [ ] Email notifications
-- [ ] Portfolio tracking
-- [ ] Position management
-- [ ] Take-profit / stop-loss automation
-- [ ] Multi-chain support (future)
+**Status**: Next after production rollout
 
-### Estimated Duration: Ongoing
+- [ ] Measure what percentage of daily launches each discovery source captures
+- [ ] Add a broader free launch source or reliable Helius launch parser if coverage is insufficient
+- [ ] Increase qualified-wallet evidence coverage and expose wallet cohort reasoning
+- [ ] Add provider health history, ingestion lag, and per-source failure telemetry
+- [ ] Add saved scanner views and watchlist-to-alert workflows
+- [ ] Add repeatable browser tests for mobile, filters, unlock, and degraded states
 
-## Decision Criteria for Phase Progression
+## Phase 2.8: Production Hardening
 
-A phase is ready to begin when:
-1. Previous phase tests are all passing
-2. Previous phase documentation is up to date
-3. No critical known issues remain
-4. Infrastructure for next phase is ready
+**Status**: Planned before trading
 
-A phase is complete when:
-1. All planned features are implemented
-2. All tests pass
-3. Documentation is updated
-4. Performance meets targets
-5. Security review is complete
+- [ ] Load-test scanner, dashboard, outcomes, and strategy replay with production-sized data
+- [ ] Add targeted Redis caching based on measured hot queries
+- [ ] Add retention and archival policy for snapshots, raw events, jobs, and failures
+- [ ] Add alerting for stale data, dead letters, worker downtime, and provider quota errors
+- [ ] Complete the final security review and credential rotation
+- [ ] Produce a seven-day reliability and edge report
+
+## Phase 3: Trading and Delivery
+
+**Status**: Final phase, blocked
+
+Start only when Phase 2.6 evidence gates pass and Phase 2.7/2.8 production criteria are complete.
+
+- [ ] Jupiter live quote integration
+- [ ] Solana Wallet Adapter with client-side signing
+- [ ] Transaction simulation and explicit risk confirmation
+- [ ] Non-custodial transaction submission and status tracking
+- [ ] Position, PnL, and trade outcome tracking
+- [ ] Simulated Telegram commands before any live trading command
+- [ ] Final external notification channels required by the operator
+
+## Phase 3 Start Gate
+
+1. Production data has remained fresh and workers healthy for seven continuous days.
+2. Discovery coverage and provider failure rates are measured and acceptable.
+3. Candidate strategies pass minimum sample size, return, drawdown, coverage, and false-positive gates.
+4. No critical or high-severity open defects remain.
+5. Security review confirms no server-side custody of wallet private keys.
+6. The user explicitly approves beginning trading implementation.

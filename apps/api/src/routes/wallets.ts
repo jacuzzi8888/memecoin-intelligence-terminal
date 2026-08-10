@@ -6,10 +6,12 @@ import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
 import { enqueueWalletSyncJob } from "@memecoin/indexer";
 import { WALLET_SYNC_QUEUE } from "@memecoin/queue";
-import { ensureDevelopmentUser } from "./dev-user.js";
+import { resolveRequestUser } from "./dev-user.js";
+import { isValidSolanaWalletAddress } from "./solana-address.js";
 
 const querySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
+  includeInvalid: z.coerce.boolean().default(false),
 });
 
 const createWalletSchema = z.object({
@@ -27,7 +29,10 @@ export const walletsRoute: FastifyPluginAsync = async (app) => {
   app.get("/wallets", async (request) => {
     const query = querySchema.parse(request.query);
     const db = getDb();
-    const wallets = await db.select().from(schema.wallets).limit(query.limit);
+    const walletRows = await db.select().from(schema.wallets).orderBy(desc(schema.wallets.updatedAt)).limit(query.limit * 4);
+    const wallets = walletRows
+      .filter((wallet) => query.includeInvalid || isValidSolanaWalletAddress(wallet.address))
+      .slice(0, query.limit);
 
     const walletIds = wallets.map((wallet) => wallet.id);
     const walletAddresses = wallets.map((wallet) => wallet.address);
@@ -150,10 +155,21 @@ export const walletsRoute: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post("/wallets", async (request) => {
+  app.post("/wallets", async (request, reply) => {
     const body = createWalletSchema.parse(request.body || {});
     const db = getDb();
-    await ensureDevelopmentUser(db);
+
+    if (!isValidSolanaWalletAddress(body.address)) {
+      reply.status(400);
+      return {
+        success: false,
+        error: "Invalid Solana wallet address",
+        requestId: request.id,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    await resolveRequestUser(db, request);
 
     const existing = await db.select().from(schema.wallets).where(eq(schema.wallets.address, body.address));
     if (existing.length === 0) {
@@ -186,6 +202,16 @@ export const walletsRoute: FastifyPluginAsync = async (app) => {
     const params = z.object({ address: z.string() }).parse(request.params);
 
     try {
+      if (!isValidSolanaWalletAddress(params.address)) {
+        reply.status(400);
+        return {
+          success: false,
+          error: "Invalid Solana wallet address",
+          requestId: request.id,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
       const result = await enqueueWalletSyncJob(params.address, "api");
       return {
         success: true,

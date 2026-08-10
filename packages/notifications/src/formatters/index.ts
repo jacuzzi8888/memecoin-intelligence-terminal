@@ -19,7 +19,7 @@ export interface AlertData {
 }
 
 function escapeMarkdownV2(text: string): string {
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, "\\$1");
+  return text.replace(/([_*[\]()~`>#+\-=|{}.!])/g, "\\$1");
 }
 
 function formatUsd(value?: number): string {

@@ -1,106 +1,98 @@
-# Scanner & Scoring Specification
+# Scanner and Scoring Specification
 
-## Overview
+## Separation of Concerns
 
-The scanner evaluates tokens in real-time against active strategies. When a token meets strategy criteria, a signal is generated and an alert is delivered.
+The scanner and alert system are intentionally separate:
+
+1. Discovery observes current tokens from configured sources.
+2. Every processed token may receive a `system-market-scan` observation for ranking and research.
+3. The canonical strategy engine evaluates active versioned strategies.
+4. Only a matched strategy can create a strategy signal and alert.
+
+This allows broad market coverage without converting every observed token into a notification.
+
+## Discovery Loop
+
+- Default schedule: 15 seconds
+- Maximum candidates per pass: 150
+- Concurrent passes: prohibited by an in-process overlap guard
+- Sources: Helius token discovery/stream when available, DexScreener Solana profiles, DexScreener boosts, then RPC fallback
+- A faster schedule does not imply complete launch coverage; source coverage must be measured separately
 
 ## Signal Score
 
-### Calculation
-The signal score combines:
-1. **Token intelligence score** (from Token Intelligence Spec)
-2. **Wallet participation score** (qualified wallets involved)
-3. **Timing score** (how early the signal is)
-4. **Risk adjustment** (penalties for high-risk factors)
+Current ruleset: `token-signal-v0.2.0`
 
-### Formula (Phase 1)
-```
-signal_score = 
-  (token_score * 0.4) +
-  (wallet_score * 0.3) +
-  (timing_score * 0.2) +
-  (100 - risk_penalty * 0.1)
+```text
+observed_quality = sum(signed_weighted_contributions) / sum(observed_weights)
+confidence = observed_feature_count / expected_feature_count
+signal_score = observed_quality * confidence + 50 * (1 - confidence)
 ```
 
-Where:
-- `token_score`: 0-100 from token intelligence
-- `wallet_score`: 0-100 based on qualified wallet count and quality
-- `timing_score`: 0-100 based on token age (earlier = higher)
-- `risk_penalty`: 0-100 from token risk assessment
+- Factors include liquidity, qualified wallets, volume, holder count, age, holder concentration, bundled supply, and deployer risk.
+- Negative contributions remain negative.
+- Missing evidence lowers confidence and pulls an observed score toward the neutral prior.
+- Completely missing evidence returns zero.
+- The score is a deterministic ranking value, not a probability of profit or trading recommendation.
 
-## Strategies
+## Risk Score
 
-### Strategy Definition
+Current ruleset: `token-risk-v0.2.0`
+
+- Risk uses mint/freeze authority, liquidity, LP posture, holder concentration, bundling, deployer behavior, and qualified-wallet evidence.
+- Missing security evidence reduces risk confidence.
+- Low-confidence assessments return `unknown` unless observed evidence already proves high or critical risk.
+- Opportunity score and risk score are independent. The UI must never infer risk from alert priority or opportunity score.
+
+## Strategy Evaluation
+
 ```typescript
 interface StrategyConfig {
+  id: string;
   name: string;
   version: string;
+  isActive: boolean;
   conditions: StrategyCondition[];
   alertThreshold: number;
-  channels: NotificationChannel[];
-  enabled: boolean;
-}
-
-interface StrategyCondition {
-  field: string;       // e.g., "token_score", "wallet_count"
-  operator: "gt" | "lt" | "eq" | "between";
-  value: number | [number, number];
-  weight: number;
+  cooldownMinutes: number;
+  channels: string[];
+  priority: "critical" | "high" | "medium" | "low";
 }
 ```
 
-### Default Strategies
-1. **Alpha Alert**: High token score + multiple qualified wallets
-2. **Early Entry**: Very new token + high wallet quality
-3. **Volume Spike**: Unusual volume + positive risk factors
-4. **Cohort Signal**: Multiple wallets from same cohort entering
+- Each configured condition contributes its weight only when it matches.
+- `alertThreshold` is applied to weighted condition coverage.
+- Empty condition sets never match.
+- Legacy minimum fields are normalized into strict required conditions with a threshold of 100.
+- Discovery, raw-event processing, and historical replay use the same engine and field semantics.
 
-## Scoring Pipeline
+## Persistence
 
+```text
+Discovery -> Token/Launch/Snapshot
+          -> Market Observation -> Scanner
+          -> Strategy Evaluation -> Strategy Signal -> Alert -> Delivery Queue
 ```
-Token Event
-→ Calculate token score (Token Intelligence)
-→ Identify qualified wallets
-→ Calculate wallet participation score
-→ Calculate timing score (from token age)
-→ Calculate risk penalty
-→ Combine into signal score
-→ Evaluate against strategies
-→ If threshold met: create signal + alert
-```
+
+- Market observations use strategy ID `system-market-scan` and do not create alerts.
+- A strategy signal stores the evaluation details in metadata.
+- The scanner reads only market observations, preventing duplicate strategy rows from inflating candidate counts.
 
 ## Deduplication
 
-- Each token can only trigger one alert per strategy per cooldown period
-- Cooldown period is configurable per strategy (default: 1 hour)
-- Duplicate detection uses token address + strategy ID + time window
+- Market observations are re-emitted only after the refresh window and a material score or priority change.
+- Strategy signals respect the greater of the global refresh window and strategy cooldown.
+- A new strategy signal additionally requires a score delta of at least five or a priority change.
+- Invalid legacy pending alerts are marked `superseded` by migration `0004_sudden_baron_zemo.sql`.
 
-## Alert Priority
+## Alert Delivery and Outcomes
 
-| Priority | Score Range | Description |
-|----------|-------------|-------------|
-| Critical | 90-100 | Very high confidence signal |
-| High | 75-89 | Strong signal |
-| Medium | 60-74 | Moderate signal |
-| Low | 40-59 | Weak signal, monitor only |
-| Info | 0-39 | Below alert threshold |
+- Alert priority comes from the matched strategy, not a hard-coded score range.
+- The alert worker consumes BullMQ jobs and performs a recovery pass on startup.
+- No eligible destination is recorded as a skipped route rather than left pending forever.
+- Outcomes are measured at 5m, 15m, 1h, 4h, and 24h.
+- Strategy reports include win rate, average return, MAE, maximum return, failure classes, coverage gaps, and manual review evidence.
 
-## Implementation Phases
+## Scanner Filters
 
-### Phase 1 (Current)
-- Deterministic scoring with fixed weights
-- Single default strategy
-- Basic deduplication
-- Alert creation and storage
-
-### Phase 2
-- Configurable strategies per user
-- Multiple scoring rulesets
-- Advanced deduplication
-- Alert routing and prioritization
-
-### Phase 3
-- ML-enhanced scoring
-- Strategy optimization from outcomes
-- A/B testing of scoring versions
-- Dynamic weight adjustment
+The API supports text, timeframe, score, liquidity range, market-cap range, 1h/24h volume, pair-age bounds, source, discovery source, priority, wallet count, qualified-wallet count, wallet-evidence presence, bundler exclusion, deduplication, sorting, and pagination.

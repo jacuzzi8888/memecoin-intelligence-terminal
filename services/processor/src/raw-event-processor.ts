@@ -2,7 +2,14 @@ import { randomUUID } from "crypto";
 import type { Database } from "@memecoin/database";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
-import { calculateSignalScore, calculateTokenRiskScore, type FactorContribution } from "@memecoin/intelligence";
+import {
+  calculateSignalScore,
+  calculateTokenRiskScore,
+  StrategyEngine,
+  toRuntimeStrategyConfig,
+  type FactorContribution,
+  type RuntimeStrategyRecord,
+} from "@memecoin/intelligence";
 import { logger as createLogger } from "@memecoin/logger";
 import { generateDeepLinks } from "@memecoin/notifications";
 import { and, asc, eq } from "drizzle-orm";
@@ -30,10 +37,7 @@ interface TokenRecord {
   id: string;
 }
 
-interface StrategyRecord {
-  id: string;
-  config: Record<string, unknown>;
-}
+type StrategyRecord = RuntimeStrategyRecord;
 
 export interface RawEventProcessorRepository {
   getPendingTokenLaunchEvents(limit: number): Promise<PendingRawEvent[]>;
@@ -156,6 +160,12 @@ export function createRawEventProcessorRepository(db: Database = getDb()): RawEv
     async getActiveStrategies() {
       const rows = await db.select({
         id: schema.strategies.id,
+        name: schema.strategies.name,
+        description: schema.strategies.description,
+        version: schema.strategies.currentVersion,
+        userId: schema.strategies.userId,
+        createdAt: schema.strategies.createdAt,
+        updatedAt: schema.strategies.updatedAt,
         config: schema.strategyVersions.config,
       })
         .from(schema.strategies)
@@ -167,6 +177,13 @@ export function createRawEventProcessorRepository(db: Database = getDb()): RawEv
 
       return rows.map((row) => ({
         id: row.id,
+        name: row.name,
+        description: row.description,
+        version: row.version,
+        userId: row.userId,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        isActive: true,
         config: isRecord(row.config) ? row.config : {},
       }));
     },
@@ -251,33 +268,27 @@ function getPriority(score: number) {
   return score >= 80 ? "critical" : score >= 60 ? "high" : "medium";
 }
 
-function strategyMatches(
-  strategy: StrategyRecord,
-  signalScore: number,
-  tokenAgeMinutes: number,
-  liquidityUsd: number,
-) {
-  const minScore = typeof strategy.config.minScore === "number" ? strategy.config.minScore : 0;
-  const maxAgeMinutes = typeof strategy.config.maxAgeMinutes === "number" ? strategy.config.maxAgeMinutes : null;
-  const minLiquidityUsd = typeof strategy.config.minLiquidityUsd === "number" ? strategy.config.minLiquidityUsd : 0;
-
-  if (signalScore < minScore) return false;
-  if (maxAgeMinutes !== null && tokenAgeMinutes > maxAgeMinutes) return false;
-  if (liquidityUsd < minLiquidityUsd) return false;
-
-  return true;
-}
-
 function serializeFactor(signalId: string, factor: FactorContribution) {
   return {
     id: randomUUID(),
     signalId,
     factorName: factor.factorName,
     factorType: factor.factorType,
-    rawValue: String(factor.rawValue ?? 0),
-    contribution: String(factor.contribution),
-    weight: String(factor.weight),
+    rawValue: serializeNumeric(factor.rawValue),
+    contribution: serializeNumeric(factor.contribution),
+    weight: serializeNumeric(factor.weight),
   };
+}
+
+function serializeNumeric(value: unknown) {
+  if (typeof value === "boolean") return value ? "1" : "0";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "0";
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? String(parsed) : "0";
+  }
+
+  return "0";
 }
 
 function serializeRiskFactor(
@@ -294,8 +305,8 @@ function serializeRiskFactor(
     signalId,
     factorName: factor.factorName,
     factorType: factor.impact === "mitigation" ? "positive" : "negative",
-    rawValue: String(factor.value ?? 0),
-    contribution: String(factor.impact === "mitigation" ? Math.abs(factor.contribution) : -Math.abs(factor.contribution)),
+    rawValue: serializeNumeric(factor.value),
+    contribution: serializeNumeric(factor.impact === "mitigation" ? Math.abs(factor.contribution) : -Math.abs(factor.contribution)),
     weight: "0",
   };
 }
@@ -390,13 +401,26 @@ export async function processPendingRawEvents(options: ProcessRawEventsOptions):
         lpLocked: null,
       });
 
-      const priority = getPriority(score.score);
+      const fallbackPriority = getPriority(score.score);
+      const engine = new StrategyEngine();
+      const matchingStrategies = strategies.map((strategy) => {
+        const config = toRuntimeStrategyConfig(strategy);
+        const evaluation = engine.evaluate(config, {
+          token_score: score.score,
+          score_confidence: score.confidence,
+          token_age_minutes: tokenAgeMinutes,
+          liquidity_usd: payload.initialLiquidity,
+          volume_1h_usd: null,
+          holder_count: null,
+          qualified_wallet_count: null,
+          risk_score: risk.rating === "unknown" ? null : risk.riskScore,
+          risk_confidence: risk.confidence,
+        });
+        return { strategy, config, evaluation };
+      }).filter(({ evaluation }) => evaluation.matched);
 
-      const matchingStrategies = strategies.filter((strategy) =>
-        strategyMatches(strategy, score.score, tokenAgeMinutes, payload.initialLiquidity),
-      );
-
-      for (const strategy of matchingStrategies) {
+      for (const { strategy, config, evaluation } of matchingStrategies) {
+        const priority = config.priority || fallbackPriority;
         const signalId = randomUUID();
 
         await options.repository.insertSignal({
@@ -414,6 +438,7 @@ export async function processPendingRawEvents(options: ProcessRawEventsOptions):
             marketDataProvider: rawEvent.provider,
             snapshotAvailable: false,
             sourceRawEventId: rawEvent.id,
+            strategyEvaluation: evaluation,
             risk: {
               score: risk.riskScore,
               rating: risk.rating,

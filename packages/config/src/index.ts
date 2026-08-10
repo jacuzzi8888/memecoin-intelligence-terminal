@@ -1,4 +1,12 @@
 import { z } from "zod";
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const booleanEnv = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  if (value.toLowerCase() === "true") return true;
+  if (value.toLowerCase() === "false") return false;
+  return value;
+}, z.boolean());
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -35,11 +43,52 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   LOG_FORMAT: z.enum(["pretty", "json"]).default("pretty"),
 
-  ENABLE_DEV_AUTH: z.coerce.boolean().default(true),
-  ENABLE_DEV_INGESTION: z.coerce.boolean().default(true),
-  ENABLE_LIVE_TRADING: z.coerce.boolean().default(false),
-  ENABLE_PAID_PROVIDERS: z.coerce.boolean().default(false),
+  ENABLE_DEV_AUTH: booleanEnv.default(true),
+  ENABLE_DEV_INGESTION: booleanEnv.default(true),
+  ENABLE_LIVE_TRADING: booleanEnv.default(false),
+  ENABLE_PAID_PROVIDERS: booleanEnv.default(false),
+  PERSONAL_APP_MODE: booleanEnv.default(false),
+  API_WRITE_TOKEN: z.string().min(32).optional(),
 });
+
+const DEVELOPMENT_SECRET = "development-secret-change-in-production-minimum-32-chars";
+
+export interface ApiTokenPayload {
+  principal: string;
+  expiresAt: number;
+}
+
+export function createApiToken(principal: string, secret: string, ttlSeconds = 300) {
+  const payload: ApiTokenPayload = {
+    principal,
+    expiresAt: Math.floor(Date.now() / 1000) + ttlSeconds,
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+  return `${encodedPayload}.${signature}`;
+}
+
+export function verifyApiToken(token: string, secret: string): ApiTokenPayload | null {
+  const [encodedPayload, encodedSignature] = token.split(".");
+  if (!encodedPayload || !encodedSignature) return null;
+
+  const expectedSignature = createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+  const expectedBuffer = Buffer.from(expectedSignature);
+  const actualBuffer = Buffer.from(encodedSignature);
+  if (expectedBuffer.length !== actualBuffer.length || !timingSafeEqual(expectedBuffer, actualBuffer)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as ApiTokenPayload;
+    if (!payload.principal || !Number.isFinite(payload.expiresAt) || payload.expiresAt <= Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 export type Env = z.infer<typeof envSchema>;
 
@@ -52,7 +101,14 @@ export function getEnv(): Env {
       console.error("Invalid environment variables:", result.error.format());
       throw new Error("Invalid environment configuration");
     }
-    _env = result.data;
+    const env = result.data;
+    if (env.NODE_ENV === "production" && (!env.PERSONAL_APP_MODE && env.ENABLE_DEV_AUTH || env.NEXTAUTH_SECRET === DEVELOPMENT_SECRET)) {
+      throw new Error("Production requires a non-default NEXTAUTH_SECRET and either disabled dev auth or explicit personal app mode");
+    }
+    if (env.NODE_ENV === "production" && env.PERSONAL_APP_MODE && !env.API_WRITE_TOKEN) {
+      throw new Error("Personal production mode requires API_WRITE_TOKEN to protect mutation endpoints");
+    }
+    _env = env;
   }
   return _env;
 }

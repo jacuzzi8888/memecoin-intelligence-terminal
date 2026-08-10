@@ -1,4 +1,4 @@
-export { getDb, createDbConnection, type Database } from "./client.js";
+export { closeDb, getDb, createDbConnection, type Database } from "./client.js";
 export {
   createBackgroundJobRecord,
   markBackgroundJobCompleted,

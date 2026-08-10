@@ -16,7 +16,7 @@ import {
   createWorker,
   type WalletSyncJobData,
 } from "@memecoin/queue";
-import { runWalletIntelligencePipeline } from "./wallet-pipeline.js";
+import { isValidSolanaWalletAddress, runWalletIntelligencePipeline } from "./wallet-pipeline.js";
 
 const log = logger("wallet-sync-service");
 const DEFAULT_STALE_AFTER_MS = 30 * 60 * 1000;
@@ -26,6 +26,10 @@ export async function enqueueWalletSyncJob(
   walletAddress: string,
   trigger: WalletSyncJobData["trigger"] = "api",
 ) {
+  if (!isValidSolanaWalletAddress(walletAddress)) {
+    throw new Error("Invalid Solana wallet address");
+  }
+
   const queue = createWalletSyncQueue();
   const job = await queue.add("sync-wallet", {
     walletAddress,
@@ -84,6 +88,7 @@ export async function scheduleTrackedWalletSync(options?: {
     .limit(limit * 4);
 
   const staleWallets = wallets
+    .filter((wallet) => isValidSolanaWalletAddress(wallet.address))
     .filter((wallet) => walletNeedsSync(wallet, staleAfterMs))
     .slice(0, limit);
 

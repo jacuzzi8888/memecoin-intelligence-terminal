@@ -2,6 +2,75 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.7] - 2026-08-10
+
+### Fixed
+
+- Unified live and replay strategy evaluation and prevented empty or weak legacy rules from creating alerts
+- Separated broad scanner observations from strategy alerts and added material-change deduplication
+- Added uncertainty-aware token risk, primary query indexes, corrected system strategies, and legacy alert supersession migration
+- Added personal write-key protection, private settings reads, expensive-route rate limits, and browser unlock controls
+- Embedded the alert worker, added recovery delivery and scheduled outcome measurement, and changed discovery to a protected 15-second loop
+- Replaced fabricated shell metrics, false risk labels, placeholder research, inert search, and synthetic charts with real data or explicit unavailable states
+- Changed the scanner default from score 40 to the full observed market while retaining an optional score filter
+- Added scanner text search, terminal search, micro-price formatting, CI, and frontend access-key tests
+
+## [0.1.6] - 2026-08-10
+
+### Fixed
+
+- Replaced the saturating signal-score calculation with confidence-adjusted normalization under `token-signal-v0.2.0`
+- Preserved signed negative factor contributions instead of converting them into positive score
+- Added exact score, sparse-evidence, negative-factor, and backfill reconstruction regression tests
+- Added an idempotent seven-day startup repair for persisted signals, factors, and linked alerts
+- Recalculated 861 production signals with no remaining score of 100 in the live Scanner result set
+- Changed the Scanner default minimum score from 80 to 40 at that release; `0.1.7` now shows the full observed market by default
+
+## [0.1.4] - 2026-08-02
+
+### Added
+
+- Added historical strategy replay with return, win rate, adverse excursion, max upside, failure classes, and explicit coverage gaps
+- Added 24-hour MAE and maximum-return outcome backfill for alert performance review
+- Added persisted alert review verdicts and notes with a needs-review queue and measured-outcome recommendation
+- Added the database migration for `alert_reviews`
+
+## [0.1.5] - 2026-08-02
+
+### Added
+
+- Added wallet and cohort evidence fields to historical token snapshots
+- Added wallet-aware strategy replay with fail-closed missing-data behavior
+- Added strategy evidence-gate thresholds for completed outcomes, win rate, return, MAE, manual review coverage, false-positive rate, and replay field coverage
+- Added wallet evidence coverage and gate status to the Strategies UI
+
+## [0.1.3] - 2026-07-28
+
+### Changed
+
+#### Live Data Reliability
+- Added a real DexScreener latest Solana profile fallback for scanner live scans when Helius registry discovery returns no token events
+- Enriched DexScreener-discovered tokens with pair-level symbol/name metadata and upgraded existing `NEW`/`UNKNOWN` token rows
+- Added functional scanner filters for displayed data source, minimum liquidity, priority, score, and data window
+- Exposed scanner row market fields so liquidity and volume filters are visible in the UI
+- Added scanner wallet-evidence summaries from indexed wallet trades, including trade count, wallet count, qualified wallet count, and top wallets
+- Enriched token-detail wallet evidence with wallet qualification status, wallet score, win rate, and PnL context
+- Normalized signal-factor numeric persistence in discovery and raw-event processing so text/boolean risk values do not break database inserts
+- Rejected invalid Solana wallet and known program addresses before wallet sync or wallet ingestion can call providers
+- Filtered invalid seeded wallet noise out of default wallet and dashboard surfaces
+
+#### Product Validation
+- Rebuilt and restarted the local web app, then verified `/scanner` and token-detail pages in-browser against the local API
+- Confirmed live scanner rows use current DexScreener-backed data and token detail remains preparation-only for execution
+- Confirmed scanner rows display real token symbols/names and use custom Aegis dropdown controls instead of native browser selects
+
+#### UI System
+- Added a reusable custom Aegis dropdown component and replaced native selects in scanner, settings, watchlists, and strategies
+
+#### Roadmap
+- Reframed the active roadmap around Phase 2.5 real-data reliability and Phase 2.6 evidence/backtesting before Phase 3 trading
+- Documented that Phase 3 trading should remain last until real data and edge validation are proven
+
 ## [0.1.2] - 2026-07-27
 
 ### Added

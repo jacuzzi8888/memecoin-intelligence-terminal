@@ -1,11 +1,14 @@
 # Testing Strategy
 
+The CI workflow runs frozen dependency installation, repository linting, typechecking, unit tests, and the optimized web build on pushes to `main` and pull requests. Local validation must use the same commands before deployment.
+
 ## Test Levels
 
 ### Unit Tests (Vitest)
 Fast, isolated tests for pure functions and business logic.
 
 **Coverage targets:**
+- Personal write-key request handling
 - Score calculations
 - Factor contributions
 - Missing feature handling
@@ -32,7 +35,7 @@ End-to-end tests that verify user-facing functionality.
 
 **Coverage targets:**
 - Application loads
-- Development login
+- Local single-user access
 - Dashboard renders correctly
 - Scanner displays data
 - Token page shows details
@@ -41,6 +44,7 @@ End-to-end tests that verify user-facing functionality.
 - Empty states render
 - Error states render
 - Keyboard navigation works
+- Unlock, mutation rejection, and sensitive-settings protection work
 
 ## Test Organization
 
@@ -115,10 +119,12 @@ Tests run on:
 - Every pull request
 - Before deployment
 
-Required checks:
+Automated CI checks:
 - Unit tests pass
-- Integration tests pass
-- Browser tests pass
 - Type check passes
 - Lint passes
 - Build succeeds
+
+Pre-deployment checks not yet fully automated:
+- Integration tests pass against an isolated database and Redis
+- Browser tests pass for desktop, mobile, unlock, filtering, and degraded states

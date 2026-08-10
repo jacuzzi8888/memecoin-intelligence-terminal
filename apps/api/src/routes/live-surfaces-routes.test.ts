@@ -3,10 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "@memecoin/database/schema";
 
 const getDb = vi.fn();
+const VALID_WALLET_ADDRESS = "GcETuWju2zbxZcEBf1iVH4XWpwfDjm2YUq6bFQnQwXVE";
 const enqueueWalletSyncJob = vi.fn().mockResolvedValue({
   queue: "wallet-sync",
   jobId: "wallet-job-1",
-  walletAddress: "Wallet11111111111111111111111111111111111111",
+  walletAddress: VALID_WALLET_ADDRESS,
   trigger: "api",
 });
 
@@ -150,7 +151,7 @@ const fixtures: Fixtures = {
   }],
   wallets: [{
     id: "wallet-1",
-    address: "Wallet11111111111111111111111111111111111111",
+    address: VALID_WALLET_ADDRESS,
     label: "Fast Money",
     classification: "early_buyer",
     totalTrades: 12,
@@ -160,7 +161,7 @@ const fixtures: Fixtures = {
   walletLabels: [{
     id: "label-1",
     walletId: "wallet-1",
-    walletAddress: "Wallet11111111111111111111111111111111111111",
+    walletAddress: VALID_WALLET_ADDRESS,
     label: "early_buyer",
     confidence: "0.82",
     source: "wallet-classifier-v0.1.0",
@@ -170,7 +171,7 @@ const fixtures: Fixtures = {
   walletPerformance: [{
     id: "performance-1",
     walletId: "wallet-1",
-    walletAddress: "Wallet11111111111111111111111111111111111111",
+    walletAddress: VALID_WALLET_ADDRESS,
     rulesetVersion: "wallet-classifier-v0.1.0",
     totalPnlUsd: "1500",
     realizedPnlUsd: "500",
@@ -183,7 +184,7 @@ const fixtures: Fixtures = {
   walletPositions: [{
     id: "position-1",
     walletId: "wallet-1",
-    walletAddress: "Wallet11111111111111111111111111111111111111",
+    walletAddress: VALID_WALLET_ADDRESS,
     tokenAddress: "Mint111111111111111111111111111111111111111",
     amount: "1200",
     avgEntryPrice: "0.001",
@@ -199,7 +200,7 @@ const fixtures: Fixtures = {
     jobType: "sync-wallet",
     bullJobId: "wallet-job-0",
     status: "completed",
-    payload: { walletAddress: "Wallet11111111111111111111111111111111111111" },
+    payload: { walletAddress: VALID_WALLET_ADDRESS },
     result: {},
     error: null,
     attempts: 1,
@@ -284,7 +285,7 @@ describe("API live surfaces routes", () => {
     const payload = response.json();
     expect(payload.success).toBe(true);
     expect(payload.data[0]).toMatchObject({
-      address: "Wallet11111111111111111111111111111111111111",
+      address: VALID_WALLET_ADDRESS,
       classification: "early_buyer",
     });
     expect(payload.data[0].latestLabel).toMatchObject({
@@ -323,16 +324,50 @@ describe("API live surfaces routes", () => {
   it("queues wallet sync through the shared wallet pipeline", async () => {
     const response = await app.inject({
       method: "POST",
-      url: "/api/v1/wallets/Wallet11111111111111111111111111111111111111/sync",
+      url: `/api/v1/wallets/${VALID_WALLET_ADDRESS}/sync`,
+      headers: { "content-type": "application/json" },
+      payload: {},
     });
 
     expect(response.statusCode).toBe(200);
     const payload = response.json();
     expect(payload.success).toBe(true);
-    expect(enqueueWalletSyncJob).toHaveBeenCalledWith("Wallet11111111111111111111111111111111111111", "api");
+    expect(enqueueWalletSyncJob).toHaveBeenCalledWith(VALID_WALLET_ADDRESS, "api");
     expect(payload.data).toMatchObject({
       mode: "queue",
       jobId: "wallet-job-1",
+    });
+  });
+
+  it("rejects invalid wallet sync addresses before queueing", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/wallets/DevWallet111111111111111111111111111111/sync",
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    const payload = response.json();
+    expect(payload).toMatchObject({
+      success: false,
+      error: "Invalid Solana wallet address",
+    });
+  });
+
+  it("rejects known non-wallet program addresses before queueing", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/wallets/11111111111111111111111111111111/sync",
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    const payload = response.json();
+    expect(payload).toMatchObject({
+      success: false,
+      error: "Invalid Solana wallet address",
     });
   });
 });

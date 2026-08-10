@@ -42,11 +42,11 @@ async function seed() {
   }
 
   const devWallets = [
-    { id: randomUUID(), address: "DevWallet111111111111111111111111111111", classification: "legitimate_trader", totalTrades: 150 },
-    { id: randomUUID(), address: "DevWallet222222222222222222222222222222", classification: "early_buyer", totalTrades: 85 },
-    { id: randomUUID(), address: "DevWallet333333333333333333333333333333", classification: "legitimate_trader", totalTrades: 200 },
-    { id: randomUUID(), address: "DevWallet444444444444444444444444444444", classification: "whale", totalTrades: 50 },
-    { id: randomUUID(), address: "DevWallet555555555555555555555555555555", classification: "early_buyer", totalTrades: 120 },
+    { id: randomUUID(), address: "F4BFjm8zfVni6GKsEn5ryu2mTesFugctZUn8b2ZxGuud", classification: "legitimate_trader", totalTrades: 150 },
+    { id: randomUUID(), address: "GvAjuwn9kVyjLeYnNQmGchEGfeSTasU3vVq8YkGARywb", classification: "early_buyer", totalTrades: 85 },
+    { id: randomUUID(), address: "5cZqZmUKHXAYcuQqdNmVE7AiLpdxfru6ngQWKFHrGDNy", classification: "legitimate_trader", totalTrades: 200 },
+    { id: randomUUID(), address: "FDLSG4FAQWpceHDYBKZ5CaHZKPpVDUv7GqKSmUEDbq5B", classification: "whale", totalTrades: 50 },
+    { id: randomUUID(), address: "12Un7i4fz6NbarykmQjJWxPdb4mJoiuAX1Q2v4MVJX8S", classification: "early_buyer", totalTrades: 120 },
   ];
 
   for (const wallet of devWallets) {

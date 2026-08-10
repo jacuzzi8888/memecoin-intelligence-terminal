@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, numeric, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, numeric, jsonb, index } from "drizzle-orm/pg-core";
 
 export const wallets = pgTable("wallets", {
   id: text("id").primaryKey(),
@@ -22,7 +22,9 @@ export const walletLabels = pgTable("wallet_labels", {
   source: text("source").notNull(),
   rulesetVersion: text("ruleset_version").notNull(),
   assignedAt: timestamp("assigned_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  walletAssignedIdx: index("wallet_labels_wallet_assigned_idx").on(table.walletId, table.assignedAt),
+}));
 
 export const walletTrades = pgTable("wallet_trades", {
   id: text("id").primaryKey(),
@@ -37,7 +39,10 @@ export const walletTrades = pgTable("wallet_trades", {
   slot: numeric("slot", { precision: 20, scale: 0 }),
   tradedAt: timestamp("traded_at", { mode: "date" }).notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  tokenTradedIdx: index("wallet_trades_token_traded_idx").on(table.tokenAddress, table.tradedAt),
+  walletTradedIdx: index("wallet_trades_wallet_traded_idx").on(table.walletId, table.tradedAt),
+}));
 
 export const walletPositions = pgTable("wallet_positions", {
   id: text("id").primaryKey(),
@@ -70,7 +75,9 @@ export const walletPerformance = pgTable("wallet_performance", {
   avgReturnPct: numeric("avg_return_pct", { precision: 10, scale: 4 }),
   score: integer("score"),
   calculatedAt: timestamp("calculated_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  walletCalculatedIdx: index("wallet_performance_wallet_calculated_idx").on(table.walletId, table.calculatedAt),
+}));
 
 export const walletRelationships = pgTable("wallet_relationships", {
   id: text("id").primaryKey(),
@@ -100,4 +107,6 @@ export const walletCohortMembers = pgTable("wallet_cohort_members", {
   walletAddress: text("wallet_address").notNull(),
   joinedAt: timestamp("joined_at", { mode: "date" }).defaultNow().notNull(),
   leftAt: timestamp("left_at", { mode: "date" }),
-});
+}, (table) => ({
+  cohortWalletIdx: index("wallet_cohort_members_cohort_wallet_idx").on(table.cohortId, table.walletId),
+}));

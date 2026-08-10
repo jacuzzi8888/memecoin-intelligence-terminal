@@ -4,7 +4,7 @@ import { z } from "zod";
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
-import { ensureDevelopmentUser, resolveDevelopmentUser } from "./dev-user.js";
+import { resolveRequestUser } from "./dev-user.js";
 
 const createWatchlistSchema = z.object({
   name: z.string().min(1).max(80),
@@ -86,7 +86,7 @@ async function buildWatchlistResponse(db: ReturnType<typeof getDb>, userId: stri
 export const watchlistsRoute: FastifyPluginAsync = async (app) => {
   app.get("/watchlists", async (request) => {
     const db = getDb();
-    const user = await resolveDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
 
     const data = user ? await buildWatchlistResponse(db, user.id) : [];
 
@@ -101,7 +101,7 @@ export const watchlistsRoute: FastifyPluginAsync = async (app) => {
   app.post("/watchlists", async (request) => {
     const body = createWatchlistSchema.parse(request.body || {});
     const db = getDb();
-    const user = await ensureDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
     const watchlistId = randomUUID();
 
     await db.insert(schema.watchlists).values({
@@ -126,7 +126,7 @@ export const watchlistsRoute: FastifyPluginAsync = async (app) => {
     const params = z.object({ watchlistId: z.string() }).parse(request.params);
     const body = createWatchlistItemSchema.parse(request.body || {});
     const db = getDb();
-    const user = await ensureDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
 
     const userWatchlists = await db.select().from(schema.watchlists).where(eq(schema.watchlists.userId, user.id));
     const targetWatchlist = userWatchlists.find((watchlist) => watchlist.id === params.watchlistId);
@@ -164,7 +164,7 @@ export const watchlistsRoute: FastifyPluginAsync = async (app) => {
       itemId: z.string(),
     }).parse(request.params);
     const db = getDb();
-    const user = await resolveDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
 
     if (!user) {
       reply.status(404);

@@ -5,6 +5,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../../.env") });
 
 import { logger } from "@memecoin/logger";
+import { closeDb } from "@memecoin/database";
 import { runWalletIntelligencePipeline } from "../wallet-pipeline.js";
 
 const log = logger("classify-wallet");
@@ -22,7 +23,9 @@ async function main() {
   log.info(result, "Wallet classification complete through shared wallet pipeline");
 }
 
-main().catch((err) => {
-  log.error({ error: err }, "Wallet classification failed");
-  process.exit(1);
-});
+main()
+  .then(() => closeDb())
+  .catch((err) => {
+    log.error({ error: err instanceof Error ? err.message : err }, "Wallet classification failed");
+    return closeDb().finally(() => process.exit(1));
+  });

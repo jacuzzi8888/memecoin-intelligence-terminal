@@ -1,6 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Activity, BadgeCheck, Plus, RefreshCw, ShieldAlert, Users, Wallet } from "lucide-react";
+import {
+  ErrorState,
+  LoadingRows,
+  MetricCard,
+  Panel,
+  StatusBadge,
+  formatRelative,
+  formatUsd,
+  scoreTone,
+  shortAddress,
+} from "@/components/aegis-ui";
+import { API_BASE_URL } from "@/lib/api-url";
+import { apiFetch } from "@/lib/api-client";
 
 interface WalletRow {
   id: string;
@@ -59,67 +73,61 @@ export default function WalletsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncingAddress, setSyncingAddress] = useState<string | null>(null);
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [address, setAddress] = useState("");
   const [label, setLabel] = useState("");
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  const apiUrl = API_BASE_URL;
 
-  async function fetchWallets() {
+  const fetchWallets = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
-      const response = await fetch(`${apiUrl}/api/v1/wallets?limit=50`);
-      const payload: any = await response.json();
-
-      if (!payload.success) {
-        throw new Error(payload.error || "Failed to load wallets");
-      }
-
+      const response = await fetch(`${apiUrl}/api/v1/wallets?limit=50`, { cache: "no-store" });
+      const payload: { success?: boolean; data?: WalletRow[]; error?: string } = await response.json();
+      if (!payload.success || !payload.data) throw new Error(payload.error || "Failed to load wallets");
       setWallets(payload.data);
+      setSelectedAddress((current) => current ?? payload.data?.[0]?.address ?? null);
     } catch (fetchError) {
+      setWallets([]);
       setError(fetchError instanceof Error ? fetchError.message : "Failed to load wallets");
     } finally {
       setLoading(false);
     }
-  }
+  }, [apiUrl]);
 
   useEffect(() => {
-    fetchWallets();
-  }, []);
+    void fetchWallets();
+  }, [fetchWallets]);
 
   async function addWallet() {
     if (!address.trim()) return;
-
-    const response = await fetch(`${apiUrl}/api/v1/wallets`, {
+    const response = await apiFetch(`${apiUrl}/api/v1/wallets`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        address: address.trim(),
-        label: label.trim() || undefined,
-      }),
+      body: JSON.stringify({ address: address.trim(), label: label.trim() || undefined }),
     });
-    const payload: any = await response.json();
-
-    if (payload.success) {
-      setAddress("");
-      setLabel("");
-      await fetchWallets();
+    const payload: { success?: boolean; error?: string } = await response.json();
+    if (!payload.success) {
+      setError(payload.error ?? "Failed to add wallet");
+      return;
     }
+    setAddress("");
+    setLabel("");
+    await fetchWallets();
   }
 
   async function syncWallet(walletAddress: string) {
     setSyncingAddress(walletAddress);
     setError(null);
-
     try {
-      const response = await fetch(`${apiUrl}/api/v1/wallets/${walletAddress}/sync`, {
+      const response = await apiFetch(`${apiUrl}/api/v1/wallets/${walletAddress}/sync`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
       });
-      const payload: any = await response.json();
-      if (!payload.success) {
-        throw new Error(payload.error || "Failed to sync wallet");
-      }
+      const payload: { success?: boolean; error?: string } = await response.json();
+      if (!payload.success) throw new Error(payload.error || "Failed to sync wallet");
       await fetchWallets();
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "Failed to sync wallet");
@@ -128,159 +136,180 @@ export default function WalletsPage() {
     }
   }
 
+  const selectedWallet = useMemo(
+    () => wallets.find((wallet) => wallet.address === selectedAddress) ?? wallets[0] ?? null,
+    [selectedAddress, wallets],
+  );
+  const qualifiedCount = wallets.filter((wallet) => wallet.qualification?.isQualified).length;
+  const totalPnl = wallets.reduce((sum, wallet) => sum + (wallet.performance?.totalPnlUsd ?? 0), 0);
+  const openPositions = wallets.reduce((sum, wallet) => sum + wallet.openPositions.length, 0);
+
+  if (loading) return <LoadingRows rows={5} />;
+
   return (
-    <div className="flex flex-col space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Wallet Intelligence</h1>
-        <p className="text-muted-foreground">Tracked wallets, classifications, performance snapshots, and open positions.</p>
+    <div className="space-y-4">
+      {error ? <ErrorState title="Wallet surface degraded" message={error} /> : null}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <MetricCard label="Tracked Wallets" value={wallets.length} tone="primary" />
+        <MetricCard label="Qualified" value={qualifiedCount} tone={qualifiedCount ? "success" : "default"} />
+        <MetricCard label="Open Positions" value={openPositions} tone={openPositions ? "warning" : "default"} />
+        <MetricCard label="Total PnL" value={formatUsd(totalPnl)} tone={totalPnl >= 0 ? "success" : "danger"} />
       </div>
 
-      <div className="rounded-lg border bg-card p-6 space-y-4">
-        <div>
-          <h2 className="font-semibold">Track Wallet</h2>
-          <p className="text-sm text-muted-foreground">Create a wallet record so classification and history ingestion can target it.</p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-[2fr_1fr_auto]">
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Wallet address"
-            className="rounded-md border bg-background px-3 py-2 text-sm"
-          />
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Optional label"
-            className="rounded-md border bg-background px-3 py-2 text-sm"
-          />
-          <button onClick={addWallet} className="rounded-md border px-3 py-2 text-sm hover:bg-muted/50">
-            Add Wallet
-          </button>
-        </div>
-      </div>
+      <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
+        <div className="space-y-4">
+          <Panel title="Track Wallet" icon={<Plus className="h-4 w-4" />}>
+            <div className="grid gap-3 p-standard md:grid-cols-[2fr_1fr_auto]">
+              <input
+                value={address}
+                onChange={(event) => setAddress(event.target.value)}
+                placeholder="Wallet address"
+                className="h-10 rounded-sm border border-outline bg-surface px-3 font-mono text-sm text-on-surface outline-none placeholder:text-on-surface-variant focus:border-primary"
+              />
+              <input
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                placeholder="Label"
+                className="h-10 rounded-sm border border-outline bg-surface px-3 text-sm text-on-surface outline-none placeholder:text-on-surface-variant focus:border-primary"
+              />
+              <button onClick={addWallet} className="rounded-sm border border-primary/30 bg-primary-container px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-primary-foreground">
+                Add
+              </button>
+            </div>
+          </Panel>
 
-      {loading && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-lg border bg-muted" />)}
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && wallets.length === 0 && (
-        <div className="rounded-lg border bg-card p-8 text-sm text-muted-foreground">
-          No wallets tracked yet. Add one above or seed the database to populate the wallet intelligence view.
-        </div>
-      )}
-
-      {!loading && !error && wallets.length > 0 && (
-        <div className="grid gap-4">
-          {wallets.map((wallet) => (
-            <div key={wallet.id} className="rounded-lg border bg-card p-6 space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-semibold">{wallet.label || wallet.latestLabel?.label || "Tracked Wallet"}</h2>
-                    <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{wallet.classification}</span>
-                  </div>
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">{wallet.address}</p>
-                </div>
-                <div className="text-right text-sm">
-                    <p>{wallet.totalTrades} wallet trades</p>
-                    <p className="text-muted-foreground">
-                      {wallet.lastSeenAt ? `Last seen ${new Date(wallet.lastSeenAt).toLocaleString()}` : "No last-seen timestamp"}
-                    </p>
+          <Panel title="Wallet Intelligence" icon={<Users className="h-4 w-4" />}>
+            <div className="divide-y divide-outline">
+              {wallets.length === 0 ? (
+                <div className="p-standard text-sm text-on-surface-variant">No wallets tracked yet.</div>
+              ) : (
+                wallets.map((wallet) => {
+                  const active = selectedWallet?.id === wallet.id;
+                  return (
                     <button
-                      onClick={() => syncWallet(wallet.address)}
-                      disabled={syncingAddress === wallet.address}
-                      className="mt-2 rounded-md border px-3 py-1 text-xs hover:bg-muted/50 disabled:opacity-50"
+                      key={wallet.id}
+                      onClick={() => setSelectedAddress(wallet.address)}
+                      className={`w-full px-standard py-4 text-left transition-colors ${active ? "bg-primary/5" : "bg-surface hover:bg-surface-high"}`}
                     >
-                      {syncingAddress === wallet.address ? "Queueing..." : "Queue Sync"}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-on-surface">{wallet.label || wallet.latestLabel?.label || "Tracked Wallet"}</p>
+                            <StatusBadge tone={wallet.qualification?.isQualified ? "success" : "default"}>
+                              {wallet.classification}
+                            </StatusBadge>
+                          </div>
+                          <p className="mt-2 font-mono text-xs text-primary">{shortAddress(wallet.address, 10, 8)}</p>
+                          <p className="mt-2 text-sm text-on-surface-variant">
+                            {wallet.totalTrades} trades - last seen {formatRelative(wallet.lastSeenAt)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-mono text-xl ${scoreTone(wallet.performance?.score ?? wallet.qualification?.walletScore)}`}>
+                            {wallet.performance?.score ?? wallet.qualification?.walletScore ?? "--"}
+                          </p>
+                          <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">score</p>
+                        </div>
+                      </div>
                     </button>
-                  </div>
-                </div>
+                  );
+                })
+              )}
+            </div>
+          </Panel>
+        </div>
 
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="rounded-md border p-4">
-                  <p className="text-sm font-medium text-muted-foreground">Latest Classification</p>
-                  <p className="mt-2 font-medium">{wallet.latestLabel?.label || wallet.classification}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {wallet.latestLabel ? `${Math.round(wallet.latestLabel.confidence * 100)}% confidence via ${wallet.latestLabel.source}` : "No derived label stored yet"}
-                  </p>
-                </div>
-                <div className="rounded-md border p-4">
-                  <p className="text-sm font-medium text-muted-foreground">Performance Snapshot</p>
-                  <p className="mt-2 font-medium">
-                    {wallet.performance?.score !== null && wallet.performance?.score !== undefined ? `${wallet.performance.score}/100` : "No score yet"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {wallet.performance?.winRate !== null && wallet.performance?.winRate !== undefined
-                      ? `${Math.round(wallet.performance.winRate * 100)}% win rate`
-                      : "Performance not calculated"}
-                  </p>
-                </div>
-                <div className="rounded-md border p-4">
-                  <p className="text-sm font-medium text-muted-foreground">Qualification</p>
-                  <p className="mt-2 font-medium">
-                    {wallet.qualification ? (wallet.qualification.isQualified ? "Qualified" : "Not qualified") : "No qualification yet"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {wallet.qualification?.walletScore !== null && wallet.qualification?.walletScore !== undefined
-                      ? `Wallet score ${wallet.qualification.walletScore}/100`
-                      : "Qualification pending sync"}
-                  </p>
-                </div>
-                <div className="rounded-md border p-4">
-                  <p className="text-sm font-medium text-muted-foreground">Open Positions</p>
-                  <p className="mt-2 font-medium">{wallet.openPositions.length}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {wallet.openPositions.length > 0 ? "Derived from persisted wallet positions" : "No open positions recorded"}
-                  </p>
+        <Panel title="Wallet Detail" icon={<Wallet className="h-4 w-4" />}>
+          {selectedWallet ? (
+            <div className="space-y-4 p-standard">
+              <div className="rounded-lg border border-outline bg-surface px-4 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-semibold text-on-surface">{selectedWallet.label || selectedWallet.latestLabel?.label || "Target Entity"}</h2>
+                    <p className="mt-1 font-mono text-sm text-primary">{shortAddress(selectedWallet.address, 10, 8)}</p>
+                  </div>
+                  <button
+                    onClick={() => syncWallet(selectedWallet.address)}
+                    disabled={syncingAddress === selectedWallet.address}
+                    className="rounded-sm border border-outline bg-surface-container px-3 py-2 text-on-surface disabled:opacity-50"
+                    title="Queue wallet sync"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncingAddress === selectedWallet.address ? "animate-spin" : ""}`} />
+                  </button>
                 </div>
               </div>
 
-              {wallet.latestSyncJob ? (
-                <div className="rounded-md border p-4 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <p className="font-medium">Latest Sync Job</p>
-                    <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{wallet.latestSyncJob.status}</span>
+              <div className="grid grid-cols-2 gap-2">
+                <MetricCard label="Win Rate" value={selectedWallet.performance?.winRate !== null && selectedWallet.performance?.winRate !== undefined ? `${Math.round(selectedWallet.performance.winRate * 100)}%` : "n/a"} tone="primary" />
+                <MetricCard label="PnL" value={formatUsd(selectedWallet.performance?.totalPnlUsd)} tone={(selectedWallet.performance?.totalPnlUsd ?? 0) >= 0 ? "success" : "danger"} />
+                <MetricCard label="Trades" value={selectedWallet.performance?.totalTrades ?? selectedWallet.totalTrades} />
+                <MetricCard label="Avg Return" value={selectedWallet.performance?.avgReturnPct !== null && selectedWallet.performance?.avgReturnPct !== undefined ? `${selectedWallet.performance.avgReturnPct.toFixed(1)}%` : "n/a"} />
+              </div>
+
+              <div className="rounded-lg border border-outline bg-surface px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck className="h-4 w-4 text-success" />
+                  <p className="font-semibold text-on-surface">Qualification Factors</p>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(selectedWallet.qualification?.reasons ?? []).length > 0 ? (
+                    selectedWallet.qualification!.reasons.map((reason) => (
+                      <div key={reason} className="flex items-start gap-2 text-sm text-on-surface-variant">
+                        <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-success" />
+                        {reason}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-on-surface-variant">No qualification reasons stored yet.</p>
+                  )}
+                </div>
+              </div>
+
+              {selectedWallet.latestSyncJob ? (
+                <div className={`rounded-lg border px-4 py-4 ${selectedWallet.latestSyncJob.error ? "border-destructive/40 bg-destructive/10" : "border-outline bg-surface"}`}>
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-primary" />
+                    <p className="font-semibold text-on-surface">Latest Sync Job</p>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Attempts {wallet.latestSyncJob.attempts}/{wallet.latestSyncJob.maxAttempts} | Queued {new Date(wallet.latestSyncJob.createdAt).toLocaleString()}
+                  <p className="mt-2 font-mono text-xs text-on-surface-variant">
+                    {selectedWallet.latestSyncJob.status} - attempts {selectedWallet.latestSyncJob.attempts}/{selectedWallet.latestSyncJob.maxAttempts} - queued {formatRelative(selectedWallet.latestSyncJob.createdAt)}
                   </p>
-                  {wallet.latestSyncJob.error ? (
-                    <p className="mt-1 text-xs text-destructive">{wallet.latestSyncJob.error}</p>
+                  {selectedWallet.latestSyncJob.error ? (
+                    <p className="mt-2 text-sm text-destructive">{selectedWallet.latestSyncJob.error}</p>
                   ) : null}
                 </div>
               ) : null}
 
-              {wallet.openPositions.length > 0 ? (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium">Position Details</h3>
-                  {wallet.openPositions.map((position) => (
-                    <div key={`${wallet.id}-${position.tokenAddress}`} className="rounded-md border p-4 text-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-4">
-                        <p className="font-mono text-xs">{position.tokenAddress}</p>
-                        <p className="text-muted-foreground">Opened {new Date(position.openedAt).toLocaleString()}</p>
-                      </div>
-                      <div className="mt-2 grid gap-2 md:grid-cols-4">
-                        <p>Amount: {position.amount.toFixed(4)}</p>
-                        <p>Entry: {position.avgEntryPrice?.toFixed(6) ?? "n/a"}</p>
-                        <p>Value: {position.currentValueUsd?.toFixed(2) ?? "n/a"}</p>
-                        <p>Unrealized PnL: {position.unrealizedPnlUsd?.toFixed(2) ?? "n/a"}</p>
-                      </div>
-                    </div>
-                  ))}
+              <div className="rounded-lg border border-outline bg-surface px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-warning" />
+                  <p className="font-semibold text-on-surface">Open Positions</p>
                 </div>
-              ) : null}
+                <div className="mt-3 space-y-2">
+                  {selectedWallet.openPositions.length > 0 ? (
+                    selectedWallet.openPositions.map((position) => (
+                      <div key={position.tokenAddress} className="rounded-sm border border-outline bg-surface-container px-3 py-3 text-sm">
+                        <div className="flex justify-between gap-3">
+                          <span className="font-mono text-primary">{shortAddress(position.tokenAddress)}</span>
+                          <span className="font-mono text-on-surface">{formatUsd(position.currentValueUsd)}</span>
+                        </div>
+                        <p className="mt-2 text-on-surface-variant">
+                          {position.amount.toFixed(4)} units - opened {formatRelative(position.openedAt)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-on-surface-variant">No open positions recorded for this wallet.</p>
+                  )}
+                </div>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="p-standard text-sm text-on-surface-variant">Select a wallet to inspect qualification and sync state.</div>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }

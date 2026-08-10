@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, numeric, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, numeric, jsonb, boolean, index } from "drizzle-orm/pg-core";
 
 export const tokens = pgTable("tokens", {
   id: text("id").primaryKey(),
@@ -32,7 +32,9 @@ export const tokenLaunches = pgTable("token_launches", {
   slot: numeric("slot", { precision: 20, scale: 0 }),
   metadata: jsonb("metadata").default("{}").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  tokenLaunchedIdx: index("token_launches_token_launched_idx").on(table.tokenAddress, table.launchedAt),
+}));
 
 export const markets = pgTable("markets", {
   id: text("id").primaryKey(),
@@ -56,11 +58,20 @@ export const tokenSnapshots = pgTable("token_snapshots", {
   volume24hUsd: numeric("volume_24h_usd", { precision: 30, scale: 15 }),
   liquidityUsd: numeric("liquidity_usd", { precision: 30, scale: 15 }),
   holderCount: integer("holder_count"),
+  walletCount: integer("wallet_count"),
+  qualifiedWalletCount: integer("qualified_wallet_count"),
+  cohortEntryCount: integer("cohort_entry_count"),
+  cohortQualityScore: numeric("cohort_quality_score", { precision: 10, scale: 4 }),
+  walletEvidenceAvailable: boolean("wallet_evidence_available").default(false).notNull(),
+  walletEvidenceSource: text("wallet_evidence_source"),
   priceChange1h: numeric("price_change_1h", { precision: 10, scale: 4 }),
   priceChange24h: numeric("price_change_24h", { precision: 10, scale: 4 }),
   snapshotAt: timestamp("snapshot_at", { mode: "date" }).notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  tokenSnapshotIdx: index("token_snapshots_token_snapshot_idx").on(table.tokenAddress, table.snapshotAt),
+  snapshotLiquidityIdx: index("token_snapshots_snapshot_liquidity_idx").on(table.snapshotAt, table.liquidityUsd),
+}));
 
 export const marketSnapshots = pgTable("market_snapshots", {
   id: text("id").primaryKey(),
@@ -86,7 +97,9 @@ export const rawProviderEvents = pgTable("raw_provider_events", {
   processedAt: timestamp("processed_at", { mode: "date" }),
   processingStatus: text("processing_status").default("pending").notNull(),
   ingestAt: timestamp("ingest_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  processingStatusIdx: index("raw_provider_events_status_ingest_idx").on(table.processingStatus, table.ingestAt),
+}));
 
 export const normalisedTokenEvents = pgTable("normalised_token_events", {
   id: text("id").primaryKey(),

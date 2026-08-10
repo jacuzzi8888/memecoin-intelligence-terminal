@@ -23,6 +23,9 @@
     "db:studio": "pnpm --filter @memecoin/database studio",
     "dev:ingest-sample": "pnpm --filter @memecoin/indexer ingest-sample",
     "dev:discover-tokens": "pnpm --filter @memecoin/indexer discover-tokens",
+    "dev:discover-wallets": "pnpm --filter @memecoin/indexer discover-wallets",
+    "dev:backfill-signal-scores": "pnpm --filter @memecoin/indexer backfill-signal-scores",
+    "dev:backfill-alert-outcomes": "pnpm --filter @memecoin/indexer backfill-alert-outcomes",
     "dev:ingest-wallet": "pnpm --filter @memecoin/indexer ingest-wallet --",
     "dev:classify-wallet": "pnpm --filter @memecoin/indexer classify-wallet --",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,mdx,css}\"",
@@ -30,6 +33,10 @@
     "clean": "turbo run clean"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.0",
+    "@eslint/js": "^9.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
     "turbo": "^2.3.0",
     "prettier": "^3.4.0",
     "typescript": "^5.7.0",

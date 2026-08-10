@@ -3,7 +3,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../../.env") });
-import { getDb } from "@memecoin/database";
+import { closeDb, getDb } from "@memecoin/database";
 import { createProviderRegistry } from "@memecoin/solana";
 import { logger } from "@memecoin/logger";
 import { createTokenDiscoveryRepository, discoverTokens } from "../discovery/discover-tokens.js";
@@ -49,12 +49,18 @@ async function main() {
     isMainnet,
     providers,
     repository: createTokenDiscoveryRepository(db),
+    maxEvents: Number(process.env.DISCOVERY_MAX_EVENTS ?? 100),
+    minSignalRefreshMinutes: Number(process.env.DISCOVERY_SIGNAL_REFRESH_MINUTES ?? 45),
   });
 
   log.info({ ...result, helius: useHelius }, "Token discovery scan complete");
 }
 
-main().catch((err) => {
-  log.error({ error: err }, "Token discovery failed");
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    log.error({ error: err }, "Token discovery failed");
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeDb();
+  });

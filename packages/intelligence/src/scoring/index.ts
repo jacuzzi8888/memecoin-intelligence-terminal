@@ -28,7 +28,10 @@ export interface ScoringResult {
   calculatedAt: string;
 }
 
-const RULESET_VERSION = "token-signal-v0.1.0";
+export type SignalPriority = "critical" | "high" | "medium";
+
+const RULESET_VERSION = "token-signal-v0.2.0";
+const MISSING_EVIDENCE_PRIOR = 50;
 
 const WEIGHTS = {
   liquidity: 0.20,
@@ -221,89 +224,76 @@ export function calculateSignalScore(input: ScoreInput): ScoringResult {
   let dataCompleteness = 0;
   const featureCount = 8;
 
+  const addFactor = (factor: FactorContribution, weight: number) => {
+    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
+    totalScore += factor.contribution;
+    totalWeight += weight;
+    dataCompleteness++;
+  };
+
   if (input.liquidityUsd !== null) {
     const { factor } = scoreLiquidity(input.liquidityUsd);
-    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
-    totalScore += Math.abs(factor.contribution);
-    totalWeight += WEIGHTS.liquidity;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.liquidity);
   } else {
     missingFeatures.push("liquidity");
   }
 
   if (input.qualifiedWalletCount !== null) {
     const { factor } = scoreQualifiedWallets(input.qualifiedWalletCount);
-    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
-    totalScore += Math.abs(factor.contribution);
-    totalWeight += WEIGHTS.qualifiedWalletCount;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.qualifiedWalletCount);
   } else {
     missingFeatures.push("qualified_wallet_count");
   }
 
   if (input.volume1hUsd !== null) {
     const { factor } = scoreVolume(input.volume1hUsd);
-    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
-    totalScore += Math.abs(factor.contribution);
-    totalWeight += WEIGHTS.volume;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.volume);
   } else {
     missingFeatures.push("volume_1h");
   }
 
   if (input.holderCount !== null) {
     const { factor } = scoreHolderCount(input.holderCount);
-    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
-    totalScore += Math.abs(factor.contribution);
-    totalWeight += WEIGHTS.holderCount;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.holderCount);
   } else {
     missingFeatures.push("holder_count");
   }
 
   if (input.tokenAge !== null) {
     const { factor } = scoreTokenAge(input.tokenAge);
-    positiveFactors.push(factor);
-    totalScore += factor.contribution;
-    totalWeight += WEIGHTS.tokenAge;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.tokenAge);
   } else {
     missingFeatures.push("token_age");
   }
 
   if (input.topHolderConcentration !== null) {
     const { factor } = scoreConcentration(input.topHolderConcentration);
-    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
-    totalScore += factor.contribution >= 0 ? factor.contribution : 0;
-    totalWeight += WEIGHTS.topHolderConcentration;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.topHolderConcentration);
   } else {
     missingFeatures.push("top_holder_concentration");
   }
 
   if (input.bundledSupplyPct !== null) {
     const { factor } = scoreBundledSupply(input.bundledSupplyPct);
-    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
-    totalScore += factor.contribution >= 0 ? factor.contribution : 0;
-    totalWeight += WEIGHTS.bundledSupply;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.bundledSupply);
   } else {
     missingFeatures.push("bundled_supply");
   }
 
   if (input.deployerRisk !== null) {
     const { factor } = scoreDeployerRisk(input.deployerRisk);
-    (factor.contribution >= 0 ? positiveFactors : negativeFactors).push(factor);
-    totalScore += factor.contribution >= 0 ? factor.contribution : 0;
-    totalWeight += WEIGHTS.deployerRisk;
-    dataCompleteness++;
+    addFactor(factor, WEIGHTS.deployerRisk);
   } else {
     missingFeatures.push("deployer_risk");
   }
 
-  const normalizedScore = totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0;
-  const finalScore = clamp(Math.round(normalizedScore), 0, 100);
   const confidence = clamp(dataCompleteness / featureCount, 0, 1);
+  const observedQuality = totalWeight > 0 ? clamp(totalScore / totalWeight, 0, 100) : 0;
+  // Sparse evidence is pulled toward neutral instead of being renormalized into a perfect score.
+  const evidenceAdjustedScore = totalWeight > 0
+    ? observedQuality * confidence + MISSING_EVIDENCE_PRIOR * (1 - confidence)
+    : 0;
+  const finalScore = clamp(Math.round(evidenceAdjustedScore), 0, 100);
 
   return {
     score: finalScore,
@@ -314,6 +304,10 @@ export function calculateSignalScore(input: ScoreInput): ScoringResult {
     missingFeatures,
     calculatedAt: new Date().toISOString(),
   };
+}
+
+export function getSignalPriority(score: number): SignalPriority {
+  return score >= 80 ? "critical" : score >= 60 ? "high" : "medium";
 }
 
 export { RULESET_VERSION, WEIGHTS };

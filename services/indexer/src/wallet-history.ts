@@ -6,6 +6,7 @@ const log = logger("wallet-history-service");
 const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6wpFLc7DbLZ4K3e3oV261W";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
+const WALLET_HISTORY_TIMEOUT_MS = 20_000;
 
 export interface WalletTrade {
   signature: string;
@@ -41,10 +42,13 @@ export class WalletHistoryService {
   }
 
   async getWalletTransactions(walletAddress: string, limit: number = 100): Promise<any[]> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), WALLET_HISTORY_TIMEOUT_MS);
+
     try {
       const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${this.heliusApiKey}&limit=${limit}&type=SWAP`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
         log.error({ status: response.status }, "Failed to fetch wallet transactions");
         return [];
@@ -56,6 +60,8 @@ export class WalletHistoryService {
     } catch (error) {
       log.error({ error, walletAddress }, "Error fetching wallet transactions");
       return [];
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -64,7 +70,11 @@ export class WalletHistoryService {
 
     try {
       const events = tx.events || {};
-      const swaps = events.swaps || [];
+      const swaps = Array.isArray(events.swaps)
+        ? events.swaps
+        : events.swap
+          ? [events.swap]
+          : [];
 
       for (const swap of swaps) {
         const nativeInput = swap.nativeInput;
@@ -74,8 +84,11 @@ export class WalletHistoryService {
 
         if (nativeInput && tokenOutputs.length > 0) {
           const tokenOut = tokenOutputs[0];
-          const solAmount = nativeInput.amount / 1e9;
-          const tokenAmount = tokenOut.amount / Math.pow(10, tokenOut.decimals);
+          const rawTokenAmount = tokenOut.rawTokenAmount;
+          const solAmount = Number(nativeInput.amount) / 1e9;
+          const tokenAmount = Number(rawTokenAmount?.tokenAmount ?? tokenOut.amount ?? 0) / Math.pow(10, rawTokenAmount?.decimals ?? tokenOut.decimals ?? 0);
+
+          if (!tokenOut.mint || tokenAmount <= 0) continue;
 
           trades.push({
             signature: tx.signature,
@@ -93,8 +106,11 @@ export class WalletHistoryService {
 
         if (nativeOutput && tokenInputs.length > 0) {
           const tokenIn = tokenInputs[0];
-          const solAmount = nativeOutput.amount / 1e9;
-          const tokenAmount = tokenIn.amount / Math.pow(10, tokenIn.decimals);
+          const rawTokenAmount = tokenIn.rawTokenAmount;
+          const solAmount = Number(nativeOutput.amount) / 1e9;
+          const tokenAmount = Number(rawTokenAmount?.tokenAmount ?? tokenIn.amount ?? 0) / Math.pow(10, rawTokenAmount?.decimals ?? tokenIn.decimals ?? 0);
+
+          if (!tokenIn.mint || tokenAmount <= 0) continue;
 
           trades.push({
             signature: tx.signature,
@@ -112,6 +128,12 @@ export class WalletHistoryService {
       }
 
       if (swaps.length === 0) {
+        const transferTrades = this.parseTransferBasedSwap(tx, walletAddress);
+        if (transferTrades.length > 0) {
+          trades.push(...transferTrades);
+          return trades;
+        }
+
         const instructions = tx.instructions || [];
         for (const ix of instructions) {
           if (ix.parsed?.type === "transfer" || ix.parsed?.type === "transferChecked") {
@@ -144,6 +166,77 @@ export class WalletHistoryService {
     }
 
     return trades;
+  }
+
+  private parseTransferBasedSwap(tx: any, walletAddress: string): WalletTrade[] {
+    const tokenTransfers = Array.isArray(tx.tokenTransfers) ? tx.tokenTransfers : [];
+    if (tokenTransfers.length === 0) return [];
+
+    const solInputs = tokenTransfers
+      .filter((transfer: any) => transfer.mint === SOL_MINT && transfer.fromUserAccount === walletAddress)
+      .reduce((sum: number, transfer: any) => sum + Number(transfer.tokenAmount ?? 0), 0);
+    const solOutputs = tokenTransfers
+      .filter((transfer: any) => transfer.mint === SOL_MINT && transfer.toUserAccount === walletAddress)
+      .reduce((sum: number, transfer: any) => sum + Number(transfer.tokenAmount ?? 0), 0);
+
+    const boughtTokens = tokenTransfers.filter((transfer: any) =>
+      transfer.mint && transfer.mint !== SOL_MINT && transfer.toUserAccount === walletAddress && Number(transfer.tokenAmount ?? 0) > 0,
+    );
+    const soldTokens = tokenTransfers.filter((transfer: any) =>
+      transfer.mint && transfer.mint !== SOL_MINT && transfer.fromUserAccount === walletAddress && Number(transfer.tokenAmount ?? 0) > 0,
+    );
+
+    const trades: WalletTrade[] = [];
+    if (solInputs > 0 && boughtTokens.length > 0) {
+      const totalTokenAmount = boughtTokens.reduce((sum: number, transfer: any) => sum + Number(transfer.tokenAmount ?? 0), 0);
+      for (const transfer of boughtTokens) {
+        const tokenAmount = Number(transfer.tokenAmount ?? 0);
+        const solAmount = totalTokenAmount > 0 ? solInputs * (tokenAmount / totalTokenAmount) : solInputs;
+        trades.push({
+          signature: tx.signature,
+          slot: tx.slot,
+          blockTime: tx.timestamp,
+          walletAddress,
+          tokenMint: transfer.mint,
+          type: "buy",
+          tokenAmount,
+          solAmount,
+          pricePerToken: tokenAmount > 0 ? solAmount / tokenAmount : 0,
+          dex: this.identifyDexFromSource(tx.source),
+        });
+      }
+    }
+
+    if (solOutputs > 0 && soldTokens.length > 0) {
+      const totalTokenAmount = soldTokens.reduce((sum: number, transfer: any) => sum + Number(transfer.tokenAmount ?? 0), 0);
+      for (const transfer of soldTokens) {
+        const tokenAmount = Number(transfer.tokenAmount ?? 0);
+        const solAmount = totalTokenAmount > 0 ? solOutputs * (tokenAmount / totalTokenAmount) : solOutputs;
+        trades.push({
+          signature: tx.signature,
+          slot: tx.slot,
+          blockTime: tx.timestamp,
+          walletAddress,
+          tokenMint: transfer.mint,
+          type: "sell",
+          tokenAmount,
+          solAmount,
+          pricePerToken: tokenAmount > 0 ? solAmount / tokenAmount : 0,
+          dex: this.identifyDexFromSource(tx.source),
+        });
+      }
+    }
+
+    return trades;
+  }
+
+  private identifyDexFromSource(source: unknown) {
+    const normalized = typeof source === "string" ? source.toLowerCase() : "";
+    if (normalized.includes("pump")) return "pump";
+    if (normalized.includes("jupiter")) return "jupiter";
+    if (normalized.includes("raydium")) return "raydium";
+    if (normalized.includes("orca")) return "orca";
+    return "unknown";
   }
 
   private identifyDex(swap: any): string {

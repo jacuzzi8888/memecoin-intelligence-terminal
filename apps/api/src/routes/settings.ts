@@ -1,10 +1,10 @@
 import { randomUUID } from "crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, isNull, or } from "drizzle-orm";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
-import { ensureDevelopmentUser } from "./dev-user.js";
+import { resolveRequestUser } from "./dev-user.js";
 
 const updateSettingsSchema = z.object({
   preferences: z.record(z.any()).optional(),
@@ -34,18 +34,20 @@ const updateDestinationSchema = createDestinationSchema.partial().extend({
 export const settingsRoute: FastifyPluginAsync = async (app) => {
   app.get("/settings", async (request) => {
     const db = getDb();
-    const user = await ensureDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
 
     const [settingsRows, destinations, strategies, strategyVersions] = await Promise.all([
       db.select().from(schema.userSettings).where(eq(schema.userSettings.userId, user.id)),
       db.select().from(schema.notificationDestinations).where(eq(schema.notificationDestinations.userId, user.id)),
-      db.select().from(schema.strategies),
+      db.select().from(schema.strategies).where(or(eq(schema.strategies.userId, user.id), isNull(schema.strategies.userId))),
       db.select().from(schema.strategyVersions),
     ]);
 
     const settings = settingsRows[0] ?? null;
+    const visibleStrategyIds = new Set(strategies.map((strategy) => strategy.id));
     const versionByStrategyId = new Map<string, Array<typeof strategyVersions[number]>>();
     for (const version of strategyVersions) {
+      if (!visibleStrategyIds.has(version.strategyId)) continue;
       const existing = versionByStrategyId.get(version.strategyId) ?? [];
       existing.push(version);
       versionByStrategyId.set(version.strategyId, existing);
@@ -99,7 +101,7 @@ export const settingsRoute: FastifyPluginAsync = async (app) => {
   app.put("/settings", async (request) => {
     const body = updateSettingsSchema.parse(request.body || {});
     const db = getDb();
-    const user = await ensureDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
     const existing = await db.select().from(schema.userSettings).where(eq(schema.userSettings.userId, user.id));
     const current = existing[0];
 
@@ -133,7 +135,7 @@ export const settingsRoute: FastifyPluginAsync = async (app) => {
   app.post("/settings/strategies", async (request) => {
     const body = updateStrategySchema.parse(request.body || {});
     const db = getDb();
-    const user = await ensureDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
     const strategyId = randomUUID();
     const versionId = randomUUID();
     const version = `v${Date.now()}`;
@@ -170,10 +172,11 @@ export const settingsRoute: FastifyPluginAsync = async (app) => {
     const params = z.object({ strategyId: z.string() }).parse(request.params);
     const body = updateStrategySchema.parse(request.body || {});
     const db = getDb();
+    const user = await resolveRequestUser(db, request);
     const existing = await db.select().from(schema.strategies).where(eq(schema.strategies.id, params.strategyId));
     const strategy = existing[0];
 
-    if (!strategy) {
+    if (!strategy || strategy.userId !== user.id) {
       reply.status(404);
       return {
         success: false,
@@ -212,8 +215,9 @@ export const settingsRoute: FastifyPluginAsync = async (app) => {
   app.delete("/settings/strategies/:strategyId", async (request, reply) => {
     const params = z.object({ strategyId: z.string() }).parse(request.params);
     const db = getDb();
+    const user = await resolveRequestUser(db, request);
     const existing = await db.select().from(schema.strategies).where(eq(schema.strategies.id, params.strategyId));
-    if (existing.length === 0) {
+    if (existing.length === 0 || existing[0]?.userId !== user.id) {
       reply.status(404);
       return {
         success: false,
@@ -234,7 +238,7 @@ export const settingsRoute: FastifyPluginAsync = async (app) => {
   app.post("/settings/destinations", async (request) => {
     const body = createDestinationSchema.parse(request.body || {});
     const db = getDb();
-    const user = await ensureDevelopmentUser(db);
+    const user = await resolveRequestUser(db, request);
     const destinationId = randomUUID();
 
     await db.insert(schema.notificationDestinations).values({

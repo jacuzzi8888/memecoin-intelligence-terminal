@@ -207,6 +207,24 @@ export async function getQueueStats(queue: Queue): Promise<{
   return { waiting, active, completed, failed, delayed, deadLetter };
 }
 
+export async function checkQueueConnection(timeoutMs = 1500): Promise<boolean> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await Promise.race([
+      getConnection().ping(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("Redis health check timed out")), timeoutMs);
+      }),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export async function closeAll(): Promise<void> {
   if (_rawEventProcessingQueue) {
     await _rawEventProcessingQueue.close();

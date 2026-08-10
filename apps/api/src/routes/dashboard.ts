@@ -2,12 +2,17 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { resolveSourceMetadata } from "./source-metadata.js";
+import { getRecentWindow, serializeRecentWindow } from "./recent-window.js";
+import { isValidSolanaWalletAddress } from "./solana-address.js";
+
+const MARKET_OBSERVATION_STRATEGY_ID = "system-market-scan";
 
 const querySchema = z.object({
   signalLimit: z.coerce.number().min(1).max(10).default(5),
   alertLimit: z.coerce.number().min(1).max(10).default(5),
+  sinceDays: z.coerce.number().min(1).max(30).default(1),
 });
 
 function summarizeSources(items: Array<{ dataSource?: string }>) {
@@ -32,37 +37,46 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
   app.get("/dashboard", async (request) => {
     const query = querySchema.parse(request.query);
     const db = getDb();
+    const since = getRecentWindow(query.sinceDays);
 
     const [
       tokenCount,
       signalCount,
       alertStatusRows,
-      walletCount,
+      walletRows,
       rawEventStatusRows,
       deliveryStatusRows,
       processingFailureRows,
       recentSignals,
       recentAlertRows,
+      recentWalletTrades,
     ] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` }).from(schema.tokens),
-      db.select({ count: sql<number>`count(*)` }).from(schema.signals),
+      db.select({ count: sql<number>`count(*)` }).from(schema.tokens).where(or(gte(schema.tokens.firstSeenAt, since), gte(schema.tokens.createdAt, since))),
+      db.select({ count: sql<number>`count(distinct ${schema.signals.tokenAddress})` })
+        .from(schema.signals)
+        .where(and(gte(schema.signals.detectedAt, since), eq(schema.signals.strategyId, MARKET_OBSERVATION_STRATEGY_ID))),
       db.select({
         id: schema.alerts.id,
         status: schema.alerts.status,
-      }).from(schema.alerts),
-      db.select({ count: sql<number>`count(*)` }).from(schema.wallets),
+      }).from(schema.alerts).where(and(
+        gte(schema.alerts.triggeredAt, since),
+        sql`${schema.alerts.status} <> 'superseded'`,
+      )),
+      db.select({
+        address: schema.wallets.address,
+      }).from(schema.wallets).where(or(gte(schema.wallets.lastSeenAt, since), gte(schema.wallets.createdAt, since))),
       db.select({
         id: schema.rawProviderEvents.id,
         processingStatus: schema.rawProviderEvents.processingStatus,
-      }).from(schema.rawProviderEvents),
+      }).from(schema.rawProviderEvents).where(gte(schema.rawProviderEvents.ingestAt, since)),
       db.select({
         id: schema.alertDeliveries.id,
         status: schema.alertDeliveries.status,
-      }).from(schema.alertDeliveries),
+      }).from(schema.alertDeliveries).where(gte(schema.alertDeliveries.createdAt, since)),
       db.select({
         id: schema.processingFailures.id,
         isResolved: schema.processingFailures.isResolved,
-      }).from(schema.processingFailures),
+      }).from(schema.processingFailures).where(gte(schema.processingFailures.createdAt, since)),
       db.select({
         id: schema.signals.id,
         tokenAddress: schema.signals.tokenAddress,
@@ -78,6 +92,10 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
       })
         .from(schema.signals)
         .leftJoin(schema.tokens, sql`${schema.signals.tokenAddress} = ${schema.tokens.address}`)
+        .where(and(
+          gte(schema.signals.detectedAt, since),
+          eq(schema.signals.strategyId, MARKET_OBSERVATION_STRATEGY_ID),
+        ))
         .orderBy(desc(schema.signals.detectedAt))
         .limit(query.signalLimit),
       db.select({
@@ -100,8 +118,27 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
         .leftJoin(schema.strategies, eq(schema.alerts.strategyId, schema.strategies.id))
         .leftJoin(schema.signals, eq(schema.alerts.signalId, schema.signals.id))
         .leftJoin(schema.tokens, eq(schema.alerts.tokenAddress, schema.tokens.address))
+        .where(and(
+          gte(schema.alerts.triggeredAt, since),
+          sql`${schema.alerts.status} <> 'superseded'`,
+        ))
         .orderBy(desc(schema.alerts.triggeredAt))
         .limit(query.alertLimit),
+      db.select({
+        id: schema.walletTrades.id,
+        walletAddress: schema.walletTrades.walletAddress,
+        tokenAddress: schema.walletTrades.tokenAddress,
+        tradeType: schema.walletTrades.tradeType,
+        amount: schema.walletTrades.amount,
+        valueUsd: schema.walletTrades.valueUsd,
+        tradedAt: schema.walletTrades.tradedAt,
+        tokenSymbol: schema.tokens.symbol,
+      })
+        .from(schema.walletTrades)
+        .leftJoin(schema.tokens, eq(schema.walletTrades.tokenAddress, schema.tokens.address))
+        .where(gte(schema.walletTrades.tradedAt, since))
+        .orderBy(desc(schema.walletTrades.tradedAt))
+        .limit(5),
     ]);
 
     const tokenAddresses = [...new Set([
@@ -116,7 +153,7 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
           snapshotAt: schema.tokenSnapshots.snapshotAt,
         })
           .from(schema.tokenSnapshots)
-          .where(inArray(schema.tokenSnapshots.tokenAddress, tokenAddresses))
+          .where(and(inArray(schema.tokenSnapshots.tokenAddress, tokenAddresses), gte(schema.tokenSnapshots.snapshotAt, since)))
           .orderBy(desc(schema.tokenSnapshots.snapshotAt)),
         db.select({
           tokenAddress: schema.tokenLaunches.tokenAddress,
@@ -124,7 +161,7 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
           metadata: schema.tokenLaunches.metadata,
         })
           .from(schema.tokenLaunches)
-          .where(inArray(schema.tokenLaunches.tokenAddress, tokenAddresses))
+          .where(and(inArray(schema.tokenLaunches.tokenAddress, tokenAddresses), gte(schema.tokenLaunches.launchedAt, since)))
           .orderBy(desc(schema.tokenLaunches.launchedAt)),
       ])
       : [[], []];
@@ -191,8 +228,8 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
         overview: {
           tokens: Number(tokenCount[0]?.count || 0),
           signals: Number(signalCount[0]?.count || 0),
-          alerts: alertStatusRows.length,
-          wallets: Number(walletCount[0]?.count || 0),
+          alerts: alertStatusRows.filter((row) => row.status === "pending").length,
+          wallets: walletRows.filter((wallet) => isValidSolanaWalletAddress(wallet.address)).length,
         },
         pipeline: {
           rawEventsPending: rawEventStatusRows.filter((row) => row.processingStatus === "pending").length,
@@ -205,11 +242,22 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
         },
         system: {
           environment: process.env.NODE_ENV || "development",
-          version: "0.1.0",
+          version: "0.2.0",
           dataSourceSummary: summarizeSources([...dashboardSignals, ...dashboardAlerts]),
         },
         recentSignals: dashboardSignals,
         recentAlerts: dashboardAlerts,
+        recentWalletTrades: recentWalletTrades.map((trade) => ({
+          id: trade.id,
+          walletAddress: trade.walletAddress,
+          tokenAddress: trade.tokenAddress,
+          tokenSymbol: trade.tokenSymbol || trade.tokenAddress.slice(0, 6),
+          tradeType: trade.tradeType,
+          amount: trade.amount,
+          valueUsd: trade.valueUsd,
+          tradedAt: trade.tradedAt.toISOString(),
+        })),
+        dataWindow: serializeRecentWindow(since),
       },
       requestId: request.id,
       timestamp: new Date().toISOString(),

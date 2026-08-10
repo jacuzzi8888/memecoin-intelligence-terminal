@@ -15,8 +15,8 @@
 │                        API Layer                                 │
 │                    Fastify API Server                            │
 │  ┌──────────┬──────────┬───────────┬──────────┬──────────────┐  │
-│  │ Auth     │ Rate     │ Request   │ Zod      │ Structured   │  │
-│  │ (Auth.js)│ Limiting │ IDs       │ Validate │ Logging      │  │
+│  │ Access   │ Rate     │ Request   │ Zod      │ Structured   │  │
+│  │ Boundary │ Limiting │ IDs       │ Validate │ Logging      │  │
 │  └──────────┴──────────┴───────────┴──────────┴──────────────┘  │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
@@ -54,13 +54,13 @@
 ## Layer Responsibilities
 
 ### Client Layer
-- **Web App** (Next.js): Full-featured SPA with SSR for SEO. Handles authentication, data display, and trading interactions.
+- **Web App** (Next.js): Full-featured SPA with SSR for SEO. Handles data display and trading interactions in a local single-user workspace.
 - **Telegram Bot**: Mobile-first interface for alerts, scanning, and quick actions. Uses grammY framework.
 - **API Clients**: Future mobile apps, Discord bots, or third-party integrations.
 
 ### API Layer
 - **Fastify**: Lightweight, fast HTTP server with schema-based validation.
-- **Authentication**: Auth.js with provider-neutral design. Dev mode allows login without external OAuth.
+- **Access boundary**: Personal production mutations and sensitive settings require a browser-entered write key; signed service tokens remain supported for trusted automation.
 - **Rate Limiting**: Per-user rate limits on expensive endpoints.
 - **Request Tracking**: Unique request IDs for distributed tracing.
 - **Validation**: Zod schemas shared between API and clients.
@@ -84,9 +84,11 @@
 
 ## Data Flow
 
-### Ingestion Pipeline
+### Discovery and Ingestion Pipeline
 ```
-Raw Event → Indexer (store raw) → Queue → Processor (normalize) → Queue → Scoring → Queue → Alerts → Notification
+DexScreener/Helius/RPC -> Indexer -> Market Observation -> Scanner
+                                  -> Canonical Strategy Match -> Alert Queue -> Delivery Worker
+Raw Chain Event -> Raw Event Queue -> Processor -> Same Strategy/Alert Path
 ```
 
 ### Query Path
@@ -148,22 +150,16 @@ Each interface has:
 └─────────────────────────────────────────────┘
 ```
 
-## Deployment Architecture (Future)
+## Deployment Architecture
 
-Phase 1 (Current): Local Docker Compose
-- Single PostgreSQL instance
-- Single Redis instance
-- All services run locally via `pnpm dev`
+Current target:
+- Vercel hosts the Next.js web app.
+- Railway hosts the Fastify API, PostgreSQL, Redis, and the always-on indexer container.
+- The indexer can embed processor and alert workers to fit a small personal deployment.
+- The API runs migrations before startup.
+- Local Docker Compose remains available for development and self-hosting.
 
-Phase 2 (Future): Containerized
-- Docker containers for each service
-- Managed PostgreSQL (Supabase/Neon)
-- Managed Redis (Upstash/Redis Cloud)
-
-Phase 3 (Future): Kubernetes
-- Horizontal pod autoscaling for workers
-- Service mesh for inter-service communication
-- Managed database with read replicas
+Kubernetes, service mesh, horizontal scaling, and read replicas are not current project requirements. Add them only if measured load justifies the operational cost.
 
 ## Technology Choices
 
@@ -178,7 +174,7 @@ Phase 3 (Future): Kubernetes
 | Database | PostgreSQL 16 | Relational, JSON support, mature |
 | ORM | Drizzle | Type-safe, SQL-like, lightweight |
 | Cache/Queue | Redis + BullMQ | Fast, reliable job processing |
-| Auth | Auth.js | Provider-neutral, well-maintained |
+| Access | Personal write key plus optional signed service tokens | No account UI while mutations fail closed |
 | Validation | Zod | Type-safe, composable, good errors |
 | Telegram | grammY | Modern, typed, good middleware |
 | Testing | Vitest + Playwright | Fast unit tests, E2E browser tests |

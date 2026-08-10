@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { PublicKey } from "@solana/web3.js";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
@@ -7,6 +8,13 @@ import { logger } from "@memecoin/logger";
 import { WalletHistoryService, type WalletTrade } from "./wallet-history.js";
 
 const log = logger("wallet-pipeline");
+const NON_WALLET_ADDRESSES = new Set([
+  "11111111111111111111111111111111",
+  "So11111111111111111111111111111111111111112",
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenzQdBNbLqP5VEhdkAS6wpFLc7DbLZ4K3e3oV261W",
+  "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+]);
 
 export interface WalletPipelineResult {
   walletAddress: string;
@@ -19,6 +27,25 @@ export interface WalletPipelineResult {
   flags: string[];
   walletScore: number;
   qualified: boolean;
+}
+
+export function isValidSolanaWalletAddress(walletAddress: string) {
+  if (NON_WALLET_ADDRESSES.has(walletAddress)) {
+    return false;
+  }
+
+  try {
+    const publicKey = new PublicKey(walletAddress);
+    return PublicKey.isOnCurve(publicKey);
+  } catch {
+    return false;
+  }
+}
+
+function assertValidSolanaAddress(walletAddress: string) {
+  if (!isValidSolanaWalletAddress(walletAddress)) {
+    throw new Error("Invalid Solana wallet address");
+  }
 }
 
 function buildClassificationInput(walletAddress: string, trades: WalletTrade[]): ClassificationInput {
@@ -100,6 +127,7 @@ export async function runWalletIntelligencePipeline(walletAddress: string): Prom
   if (!heliusApiKey) {
     throw new Error("HELIUS_API_KEY not set");
   }
+  assertValidSolanaAddress(walletAddress);
 
   const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
   const historyService = new WalletHistoryService(rpcUrl, heliusApiKey);
@@ -154,6 +182,20 @@ export async function runWalletIntelligencePipeline(walletAddress: string): Prom
   let insertedCount = 0;
   for (const trade of trades) {
     try {
+      const existingTrade = await db.select({ id: schema.walletTrades.id })
+        .from(schema.walletTrades)
+        .where(and(
+          eq(schema.walletTrades.walletId, wallet.id),
+          eq(schema.walletTrades.tokenAddress, trade.tokenMint),
+          eq(schema.walletTrades.tradeType, trade.type),
+          eq(schema.walletTrades.txSignature, trade.signature),
+        ))
+        .limit(1);
+
+      if (existingTrade.length > 0) {
+        continue;
+      }
+
       await db.insert(schema.walletTrades).values({
         id: randomUUID(),
         walletId: wallet.id,
