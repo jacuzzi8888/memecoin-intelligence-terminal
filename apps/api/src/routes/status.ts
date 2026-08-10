@@ -9,6 +9,19 @@ import {
   getQueueStats,
 } from "@memecoin/queue";
 
+export function serializeStatusTimestamp(value: Date | string | null | undefined) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  let normalized = value.trim().replace(" ", "T");
+  if (/[+-]\d{2}$/.test(normalized)) normalized += ":00";
+  else if (/[+-]\d{4}$/.test(normalized)) normalized = `${normalized.slice(0, -2)}:${normalized.slice(-2)}`;
+  else if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(normalized)) normalized += "Z";
+
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 export const statusRoute: FastifyPluginAsync = async (app) => {
   app.post("/access/verify", async (request) => ({
     success: true,
@@ -68,8 +81,8 @@ export const statusRoute: FastifyPluginAsync = async (app) => {
           environment: process.env.NODE_ENV || "development",
           version: "0.2.0",
           dataFreshness: {
-            latestSnapshotAt: latestSnapshot[0]?.latest?.toISOString?.() ?? latestSnapshot[0]?.latest ?? null,
-            latestSignalAt: latestSignal[0]?.latest?.toISOString?.() ?? latestSignal[0]?.latest ?? null,
+            latestSnapshotAt: serializeStatusTimestamp(latestSnapshot[0]?.latest),
+            latestSignalAt: serializeStatusTimestamp(latestSignal[0]?.latest),
           },
           queues: {
             rawEventProcessing: queueStats[0],

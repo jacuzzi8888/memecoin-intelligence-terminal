@@ -2,7 +2,13 @@
 
 **Last Updated**: 2026-08-10
 **Current Phase**: Phase 2.6, evidence accumulation and strategy proof
-**Deployment State**: The fixes below are implemented and validated in the workspace. The new migration, API write key, and service settings are not live until an approved production rollout is performed.
+**Deployment State**: Live. The web app runs on Vercel and the API, indexer, PostgreSQL, and Redis run on Railway under the `jacuzzi8888` project accounts. Migration `0004`, personal write access, embedded workers, and 15-second discovery are active in production.
+
+## Production Endpoints
+
+- Web: `https://memecoin-intelligence-terminal-inky.vercel.app`
+- API: `https://api-production-f1a50.up.railway.app`
+- API health: `https://api-production-f1a50.up.railway.app/health`
 
 ## Product State
 
@@ -29,6 +35,7 @@
 
 - Fastify API, PostgreSQL, Redis/BullMQ, indexer, processor, wallet worker, and alert worker are implemented.
 - The always-on indexer can embed the processor and alert consumer for a low-cost single-service deployment.
+- DexScreener discovery lists are cached with stale fallback and automatic `429` backoff. Token pair lookups are deduplicated and batched in groups of 30.
 - Alert delivery performs a recovery pass on startup, consumes queue jobs, and records delivered, skipped, or failed destinations.
 - Alert outcome backfill runs every 15 minutes by default.
 - API status reports data freshness, pending alerts, queue depth, dead letters, and persisted entity counts.
@@ -64,12 +71,19 @@ Verified in the current workspace:
 - Optimized Next.js production build for all 13 routes
 - CI workflow for frozen install, lint, typecheck, unit tests, and web build
 
+Verified in production on 2026-08-10:
+
+- Railway API health returned PostgreSQL and Redis `up`.
+- Six consecutive indexer passes processed 57 live events each with zero rate-limit, batch-failure, or error-level log events.
+- Production scanner returned current DexScreener observations with varied signal scores, current market fields, pair ages, and wallet evidence.
+- Unauthenticated mutations returned `401`; the saved personal key verified successfully and an authorized mainnet live scan reported healthy chain and market providers.
+- The Vercel production build completed all 13 routes and was promoted to the stable web alias.
+
 ## Remaining Gates
 
-- Apply migration `0004_sudden_baron_zemo.sql` to production.
-- Set a strong `API_WRITE_TOKEN` on the production API and enter the same value in the deployed app Settings page.
-- Deploy the updated API, indexer, and web app, then verify the live URLs.
+- Enter the saved personal key in Settings for each browser that will perform mutations; read-only market data remains public.
+- Review and retry or supersede the existing wallet-sync dead letters after confirming their provider failure causes.
 - Accumulate enough fresh wallet-enriched snapshots and reviewed alert outcomes to evaluate strategy edge.
 - Improve launch coverage beyond DexScreener profiles/boosts if near-firehose coverage is required.
-- Complete performance/load testing and targeted caching after real dataset growth is observed.
+- Complete API/database performance and load testing after real dataset growth is observed.
 - Start final Phase 3 only after the evidence gate passes.

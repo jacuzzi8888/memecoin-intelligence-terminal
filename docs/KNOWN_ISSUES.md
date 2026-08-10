@@ -2,10 +2,6 @@
 
 ## Open
 
-### KI-001: Workspace fixes are not deployed yet
-**Severity**: High
-The migration, write key, worker embedding, 15-second polling, corrected strategy behavior, and UI changes exist in the workspace only. Production remains on the previous release until an approved rollout is performed.
-
 ### KI-002: Launch coverage is not a complete Solana firehose
 **Severity**: High
 DexScreener profiles and boosts are useful current discovery feeds, but they do not represent every token launched. Helius stream reliability and exact launch coverage still need production measurement. A 15-second loop improves freshness, not source completeness.
@@ -26,9 +22,9 @@ Telegram and Discord delivery code is implemented, but real delivery requires a 
 **Severity**: Medium
 Helius and Birdeye improve metadata, holders, RPC reliability, and wallet history. Missing keys, free-tier quotas, or provider errors reduce evidence coverage. DexScreener remains the free fallback.
 
-### KI-007: Hot-path caching is not implemented
+### KI-007: API hot-path caching is not yet measured
 **Severity**: Low
-Database indexes now cover scanner, strategy, alert, snapshot, wallet, and outcome access patterns. Redis response caching should be added only after production measurements identify the actual hot queries.
+DexScreener requests now use list caching, stale fallback, token batching, deduplication, and rate-limit backoff. Database indexes cover scanner, strategy, alert, snapshot, wallet, and outcome access patterns. Redis response caching should be added only after production measurements identify actual API hot queries.
 
 ### KI-008: Automated browser coverage is limited
 **Severity**: Low
@@ -38,7 +34,16 @@ The web app has unit and production-build coverage, but repeatable end-to-end te
 **Severity**: Expected
 The terminal is preparation-only. Jupiter quotes, wallet connection, simulation, signing, execution, and position controls belong to final Phase 3 after the evidence gate passes.
 
-## Resolved in Workspace
+### KI-010: Wallet-sync dead letters need operator review
+**Severity**: Medium
+The production wallet queue contains failed jobs from provider-limited sync attempts. The system reports this honestly as degraded until the failed jobs are reviewed and retried or superseded; they should not be silently cleared.
+
+## Resolved in Production
+
+- Migration `0004`, personal write access, embedded workers, and 15-second polling are deployed on Railway.
+- The Vercel web app is connected to the live Railway API under the `jacuzzi8888` accounts.
+- DexScreener request bursts were replaced with cached discovery lists and batched token lookups; sustained production verification completed without `429` events.
+- Status timestamps are serialized as UTC, preventing local timezone offsets from showing fresh data as stale.
 
 - Signal scores no longer saturate at 100.
 - Empty or weak legacy strategies no longer create alerts.

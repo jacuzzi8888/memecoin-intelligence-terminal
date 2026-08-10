@@ -219,6 +219,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="h-4 w-px bg-outline" />
             <div className="font-mono text-[13px] text-on-surface-variant">
               Pending: <span className="text-on-surface">{status?.pendingAlerts ?? "--"}</span>
+              {deadLetters > 0 ? (
+                <>
+                  {" / "}DLQ: <span className="text-warning">{deadLetters}</span>
+                </>
+              ) : null}
             </div>
           </div>
 
