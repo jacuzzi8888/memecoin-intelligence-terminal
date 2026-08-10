@@ -4,15 +4,24 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   BookmarkPlus,
+  CirclePause,
+  CirclePlay,
   Gauge,
   Radar,
+  RotateCcw,
+  Save,
   Search,
-  SlidersHorizontal,
   Sparkles,
-  TriangleAlert,
   Zap,
 } from "lucide-react";
 import { AegisSelect } from "@/components/aegis-ui";
+import {
+  FilterChip,
+  FreshnessStamp,
+  ModuleNotice,
+  PageHeader,
+  RefreshButton,
+} from "@/components/workflow-ui";
 import { API_BASE_URL } from "@/lib/api-url";
 import { apiFetch } from "@/lib/api-client";
 
@@ -242,20 +251,49 @@ export default function ScannerPage() {
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [walletDiscovering, setWalletDiscovering] = useState(false);
   const [walletDiscoveryMessage, setWalletDiscoveryMessage] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [savedViewAvailable, setSavedViewAvailable] = useState(false);
+  const [operatorDefaultTimeframe, setOperatorDefaultTimeframe] = useState("24h");
+  const [refreshIntervalMs, setRefreshIntervalMs] = useState(15_000);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search).get("search")?.trim() ?? "";
     if (query) setSearchQuery(query);
+    setSavedViewAvailable(Boolean(window.localStorage.getItem("aegis-scanner-view")));
+    try {
+      const preferences = JSON.parse(
+        window.localStorage.getItem("aegis-operator-preferences") || "{}",
+      ) as { defaultScannerTimeframe?: string; refreshIntervalSeconds?: number };
+      if (timeframeOptions.some((option) => option.value === preferences.defaultScannerTimeframe)) {
+        setTimeframe(preferences.defaultScannerTimeframe ?? "24h");
+        setOperatorDefaultTimeframe(preferences.defaultScannerTimeframe ?? "24h");
+      }
+      const seconds = Number(preferences.refreshIntervalSeconds);
+      if ([15, 30, 60].includes(seconds)) setRefreshIntervalMs(seconds * 1_000);
+    } catch {
+      window.localStorage.removeItem("aegis-operator-preferences");
+    }
   }, []);
 
   useEffect(() => {
     let active = true;
 
-    async function fetchSignals() {
-      if (active) setLoading(true);
+    async function fetchSignals(showLoading = true) {
+      if (active && showLoading) setLoading(true);
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12_000);
       try {
         const apiUrl = API_BASE_URL;
-        const params = new URLSearchParams({ page: String(page), limit: "20", sortBy, sortOrder, timeframe });
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: "20",
+          sortBy,
+          sortOrder,
+          timeframe,
+        });
         if (searchQuery) params.set("search", searchQuery);
         if (minScore) params.set("minScore", minScore);
         applyRangeParam(params, liquidityRange, "minLiquidityUsd", "maxLiquidityUsd");
@@ -267,36 +305,50 @@ export default function ScannerPage() {
         if (priority) params.set("priority", priority);
         if (walletFilter === "has") params.set("hasWalletEvidence", "true");
         if (walletFilter === "qualified") params.set("minQualifiedWalletCount", "1");
-        if (walletFilter && !["has", "qualified"].includes(walletFilter)) params.set("minWalletCount", walletFilter);
+        if (walletFilter && !["has", "qualified"].includes(walletFilter))
+          params.set("minWalletCount", walletFilter);
         if (excludeBundlers === "true") params.set("excludeBundlers", "true");
-        const res = await fetch(`${apiUrl}/api/v1/scanner?${params}`, { cache: "no-store" });
-        const data: { success?: boolean; data?: ScannerItem[]; error?: string } = await res.json();
+        const res = await fetch(`${apiUrl}/api/v1/scanner?${params}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data: {
+          success?: boolean;
+          data?: ScannerItem[];
+          error?: string;
+          timestamp?: string;
+          pagination?: { total: number; totalPages: number };
+        } = await res.json();
         if (data.success && data.data) {
           if (active) {
             setItems(data.data);
             setSelectedId((current) => current ?? data.data?.[0]?.id ?? null);
+            setTotalPages(Math.max(1, data.pagination?.totalPages ?? 1));
+            setTotalResults(data.pagination?.total ?? data.data.length);
+            setLastUpdatedAt(data.timestamp ?? new Date().toISOString());
             setError(null);
           }
         } else {
           if (active) {
-            setItems([]);
             setError(data.error ?? "Scanner data is unavailable.");
           }
         }
       } catch {
         if (active) {
-          setItems([]);
           setError("Failed to fetch signals. API connection is currently unavailable.");
         }
       } finally {
-        if (active) setLoading(false);
+        window.clearTimeout(timeout);
+        if (active && showLoading) setLoading(false);
       }
     }
-    fetchSignals();
-    const refreshInterval = window.setInterval(fetchSignals, 15_000);
+    void fetchSignals(true);
+    const refreshInterval = autoRefresh
+      ? window.setInterval(() => void fetchSignals(false), refreshIntervalMs)
+      : null;
     return () => {
       active = false;
-      window.clearInterval(refreshInterval);
+      if (refreshInterval) window.clearInterval(refreshInterval);
     };
   }, [
     page,
@@ -315,12 +367,84 @@ export default function ScannerPage() {
     walletFilter,
     excludeBundlers,
     refreshNonce,
+    autoRefresh,
+    refreshIntervalMs,
   ]);
 
   function updateFilter(setter: (value: string) => void, value: string) {
     setter(value);
     setPage(1);
     setSelectedId(null);
+  }
+
+  function resetFilters() {
+    setTimeframe(operatorDefaultTimeframe);
+    setLiquidityRange("");
+    setMarketCapRange("");
+    setMinVolume1hUsd("");
+    setMaxPairAgeMinutes("");
+    setDataSource("all");
+    setDiscoverySource("all");
+    setPriority("");
+    setWalletFilter("");
+    setExcludeBundlers("false");
+    setMinScore("");
+    setSearchQuery("");
+    setSortBy("detected_at");
+    setSortOrder("desc");
+    setPage(1);
+    setSelectedId(null);
+  }
+
+  function saveCurrentView() {
+    window.localStorage.setItem(
+      "aegis-scanner-view",
+      JSON.stringify({
+        timeframe,
+        liquidityRange,
+        marketCapRange,
+        minVolume1hUsd,
+        maxPairAgeMinutes,
+        dataSource,
+        discoverySource,
+        priority,
+        walletFilter,
+        excludeBundlers,
+        minScore,
+        sortBy,
+        sortOrder,
+      }),
+    );
+    setSavedViewAvailable(true);
+    setScanMessage("Saved this scanner view in the current browser.");
+  }
+
+  function restoreSavedView() {
+    const raw = window.localStorage.getItem("aegis-scanner-view");
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw) as Record<string, string>;
+      setTimeframe(saved.timeframe || "24h");
+      setLiquidityRange(saved.liquidityRange || "");
+      setMarketCapRange(saved.marketCapRange || "");
+      setMinVolume1hUsd(saved.minVolume1hUsd || "");
+      setMaxPairAgeMinutes(saved.maxPairAgeMinutes || "");
+      setDataSource(saved.dataSource || "all");
+      setDiscoverySource(saved.discoverySource || "all");
+      setPriority(saved.priority || "");
+      setWalletFilter(saved.walletFilter || "");
+      setExcludeBundlers(saved.excludeBundlers || "false");
+      setMinScore(saved.minScore || "");
+      setSortBy(saved.sortBy || "detected_at");
+      setSortOrder(saved.sortOrder === "asc" ? "asc" : "desc");
+      setPage(1);
+      setSelectedId(null);
+      setScanMessage("Restored the saved scanner view.");
+    } catch {
+      window.localStorage.removeItem("aegis-scanner-view");
+      setSavedViewAvailable(false);
+      setScanMessage("The saved view was invalid and has been removed.");
+    }
   }
 
   async function runLiveScan() {
@@ -419,20 +543,66 @@ export default function ScannerPage() {
     [items, selectedId],
   );
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return <ScannerSkeleton />;
   }
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        eyebrow="Live discovery"
+        title="Rank the market without losing your place"
+        description="Filter the observed token universe, pause automatic updates while investigating, and hand promising candidates directly into Research or a watchlist."
+        meta={
+          <>
+            <FreshnessStamp value={lastUpdatedAt} label="Ranking" />
+            <FilterChip active={autoRefresh}>
+              {autoRefresh ? "Live refresh 15s" : "Ranking paused"}
+            </FilterChip>
+            <FilterChip>{totalResults} matches</FilterChip>
+          </>
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setAutoRefresh((current) => !current)}
+              className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-outline bg-surface px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface hover:border-primary/60 hover:text-primary"
+            >
+              {autoRefresh ? (
+                <CirclePause className="h-3.5 w-3.5" />
+              ) : (
+                <CirclePlay className="h-3.5 w-3.5" />
+              )}
+              {autoRefresh ? "Pause updates" : "Resume updates"}
+            </button>
+            <button
+              type="button"
+              onClick={saveCurrentView}
+              className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-outline bg-surface px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface hover:border-primary/60 hover:text-primary"
+            >
+              <Save className="h-3.5 w-3.5" />
+              Save view
+            </button>
+            <RefreshButton
+              onClick={() => setRefreshNonce((current) => current + 1)}
+              busy={loading}
+            />
+          </>
+        }
+      />
       {error && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
-          <TriangleAlert className="mt-0.5 h-4 w-4 text-destructive" />
-          <div>
-            <p className="font-semibold text-destructive">Scanner degraded</p>
-            <p className="text-on-surface-variant">{error}</p>
-          </div>
-        </div>
+        <ModuleNotice
+          tone="warning"
+          title="Scanner refresh degraded"
+          message={`${error} The last successful ranking remains visible.`}
+          action={
+            <RefreshButton
+              onClick={() => setRefreshNonce((current) => current + 1)}
+              busy={loading}
+            />
+          }
+        />
       )}
 
       <div className="rounded-lg border border-outline bg-surface-container">
@@ -440,7 +610,7 @@ export default function ScannerPage() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-2 flex items-center gap-2">
               <Radar className="h-4 w-4 text-primary" />
-              <h1 className="text-base font-semibold text-on-surface">Scanner</h1>
+              <h2 className="text-base font-semibold text-on-surface">Market Filters</h2>
             </div>
 
             <button
@@ -549,27 +719,10 @@ export default function ScannerPage() {
 
             <button
               type="button"
-              onClick={() => {
-                setMinScore("");
-                setSearchQuery("");
-                setTimeframe("24h");
-                setLiquidityRange("");
-                setMarketCapRange("");
-                setMinVolume1hUsd("");
-                setMaxPairAgeMinutes("");
-                setDataSource("all");
-                setDiscoverySource("all");
-                setPriority("");
-                setWalletFilter("");
-                setExcludeBundlers("false");
-                setSortBy("detected_at");
-                setSortOrder("desc");
-                setPage(1);
-                setSelectedId(null);
-              }}
+              onClick={resetFilters}
               className="flex items-center gap-2 rounded-sm border border-outline bg-surface px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface"
             >
-              <SlidersHorizontal className="h-4 w-4" />
+              <RotateCcw className="h-4 w-4" />
               Reset
             </button>
             <button
@@ -593,10 +746,17 @@ export default function ScannerPage() {
 
         <div className="px-standard py-2">
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="font-mono uppercase tracking-[0.12em] text-on-surface-variant">Saved view</span>
-            <span className="rounded-sm border border-outline bg-surface px-2 py-1 font-mono uppercase tracking-[0.12em] text-on-surface">
-              Market Radar
+            <span className="font-mono uppercase tracking-[0.12em] text-on-surface-variant">
+              Saved view
             </span>
+            <button
+              type="button"
+              onClick={restoreSavedView}
+              disabled={!savedViewAvailable}
+              className="rounded-sm border border-outline bg-surface px-2 py-1 font-mono uppercase tracking-[0.12em] text-on-surface disabled:opacity-40"
+            >
+              {savedViewAvailable ? "Restore my view" : "No saved view"}
+            </button>
             <span className="rounded-sm border border-primary/30 bg-primary-container/10 px-2 py-1 font-mono uppercase tracking-[0.12em] text-primary">
               Live {timeframe}
             </span>
@@ -610,7 +770,8 @@ export default function ScannerPage() {
               Liquidity: {optionLabel(liquidityOptions, liquidityRange)}
             </span>
             <span className="rounded-sm border border-outline bg-surface px-2 py-1 font-mono uppercase tracking-[0.12em] text-on-surface-variant">
-              Pair age: {maxPairAgeMinutes ? `<${formatAgeMinutes(Number(maxPairAgeMinutes))}` : "Any"}
+              Pair age:{" "}
+              {maxPairAgeMinutes ? `<${formatAgeMinutes(Number(maxPairAgeMinutes))}` : "Any"}
             </span>
             <span className="rounded-sm border border-outline bg-surface px-2 py-1 font-mono uppercase tracking-[0.12em] text-on-surface-variant">
               Wallets: {optionLabel(walletFilterOptions, walletFilter)}
@@ -630,8 +791,8 @@ export default function ScannerPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <section className="overflow-hidden rounded-lg border border-outline bg-surface shadow-panel">
-          <div className="grid grid-cols-[64px_minmax(180px,2fr)_72px_82px_94px_94px_88px_82px_88px_88px_84px_68px_92px] border-b border-outline bg-surface-container px-4 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+        <section className="overflow-x-auto rounded-lg border border-outline bg-surface shadow-panel scrollbar-thin">
+          <div className="grid min-w-[1180px] grid-cols-[64px_minmax(180px,2fr)_72px_82px_94px_94px_88px_82px_88px_88px_84px_68px_92px] border-b border-outline bg-surface-container px-4 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
             <span>Rank</span>
             <span>Asset</span>
             <button className="text-right" onClick={() => setSortBy("signal_score")}>
@@ -647,7 +808,10 @@ export default function ScannerPage() {
             <span className="text-right">Fresh</span>
             <span className="text-right">Detected</span>
             <span className="text-center">Source</span>
-            <button className="text-center" onClick={() => setSortOrder((current) => (current === "desc" ? "asc" : "desc"))}>
+            <button
+              className="text-center"
+              onClick={() => setSortOrder((current) => (current === "desc" ? "asc" : "desc"))}
+            >
               Risk
             </button>
             <span className="text-right">Actions</span>
@@ -679,7 +843,7 @@ export default function ScannerPage() {
                     role="button"
                     tabIndex={0}
                     className={[
-                      "relative grid cursor-pointer grid-cols-[64px_minmax(180px,2fr)_72px_82px_94px_94px_88px_82px_88px_88px_84px_68px_92px] items-center border-b border-outline/60 px-4 py-3 text-left transition-colors",
+                      "relative grid min-w-[1180px] cursor-pointer grid-cols-[64px_minmax(180px,2fr)_72px_82px_94px_94px_88px_82px_88px_88px_84px_68px_92px] items-center border-b border-outline/60 px-4 py-3 text-left transition-colors",
                       active ? "bg-primary/5" : "bg-surface hover:bg-surface-high",
                     ].join(" ")}
                   >
@@ -692,12 +856,16 @@ export default function ScannerPage() {
                         {item.tokenSymbol.slice(0, 3)}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-on-surface">${item.tokenSymbol}</p>
+                        <p className="truncate text-sm font-semibold text-on-surface">
+                          ${item.tokenSymbol}
+                        </p>
                         <p className="truncate text-xs text-on-surface-variant">{item.tokenName}</p>
                       </div>
                     </div>
 
-                    <span className={`text-right font-mono text-sm tabular-nums ${scoreTone(item.signalScore)}`}>
+                    <span
+                      className={`text-right font-mono text-sm tabular-nums ${scoreTone(item.signalScore)}`}
+                    >
                       {item.signalScore}
                     </span>
                     <span className="text-right font-mono text-sm text-on-surface tabular-nums">
@@ -725,13 +893,22 @@ export default function ScannerPage() {
                       {item.dataSource}
                     </span>
                     <span className="flex justify-center">
-                      <span className={`h-2.5 w-2.5 rounded-full ${riskDot(item.risk.rating)}`} title={`Risk: ${item.risk.rating ?? "unknown"}`} />
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${riskDot(item.risk.rating)}`}
+                        title={`Risk: ${item.risk.rating ?? "unknown"}`}
+                      />
                     </span>
 
                     <div className="flex items-center justify-end gap-2">
-                      <span className="rounded-sm p-1 text-on-surface-variant">
+                      <Link
+                        href={`/watchlists?type=token&address=${item.tokenAddress}&note=${encodeURIComponent(`Scanner score ${item.signalScore}`)}`}
+                        title="Add to watchlist"
+                        aria-label={`Watch ${item.tokenSymbol}`}
+                        className="rounded-sm p-1 text-on-surface-variant transition-colors hover:bg-surface-highest hover:text-primary"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <BookmarkPlus className="h-4 w-4" />
-                      </span>
+                      </Link>
                       <Link
                         href={`/tokens/${item.tokenAddress}`}
                         className="rounded-sm border border-primary/30 bg-primary-container/10 p-1 text-primary transition-colors hover:bg-primary-container/20"
@@ -741,7 +918,9 @@ export default function ScannerPage() {
                       </Link>
                     </div>
 
-                    {active && <span className="pointer-events-none absolute left-0 top-0 h-full w-1 bg-primary" />}
+                    {active && (
+                      <span className="pointer-events-none absolute left-0 top-0 h-full w-1 bg-primary" />
+                    )}
                   </div>
                 );
               })
@@ -756,10 +935,13 @@ export default function ScannerPage() {
             >
               Previous
             </button>
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Page {page}</span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+              Page {page} of {totalPages} · {totalResults} results
+            </span>
             <button
               onClick={() => setPage(page + 1)}
-              className="rounded-sm border border-outline bg-surface px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface"
+              disabled={page >= totalPages}
+              className="rounded-sm border border-outline bg-surface px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface disabled:opacity-40"
             >
               Next
             </button>
@@ -783,7 +965,9 @@ export default function ScannerPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-2xl font-semibold text-on-surface">${selectedItem.tokenSymbol}</p>
+                      <p className="text-2xl font-semibold text-on-surface">
+                        ${selectedItem.tokenSymbol}
+                      </p>
                       <span className="rounded-sm bg-surface-container px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
                         SPL
                       </span>
@@ -798,48 +982,72 @@ export default function ScannerPage() {
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-sm border border-outline bg-surface-container-highest p-3">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">Contract</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                        Contract
+                      </p>
                       <p className="mt-2 font-mono text-[11px] text-success">Observed</p>
                     </div>
                     <div className="rounded-sm border border-outline bg-surface-container-highest p-3">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">Confidence</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                        Confidence
+                      </p>
                       <p className="mt-2 font-mono text-[11px] text-success">
                         {(selectedItem.confidence * 100).toFixed(0)}%
                       </p>
                     </div>
                     <div className="rounded-sm border border-outline bg-surface-container-highest p-3">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">Source</p>
-                      <p className="mt-2 font-mono text-[11px] text-on-surface">{selectedItem.dataSource}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                        Source
+                      </p>
+                      <p className="mt-2 font-mono text-[11px] text-on-surface">
+                        {selectedItem.dataSource}
+                      </p>
                     </div>
                     <div className="rounded-sm border border-outline bg-surface-container-highest p-3">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">Priority</p>
-                      <p className="mt-2 font-mono text-[11px] text-warning uppercase">{selectedItem.priority}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                        Priority
+                      </p>
+                      <p className="mt-2 font-mono text-[11px] text-warning uppercase">
+                        {selectedItem.priority}
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Live Metrics</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+                    Live Metrics
+                  </p>
                   <div className="rounded-sm border border-outline bg-surface-lowest p-3">
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Freshness</span>
-                      <span className="font-mono text-on-surface">{formatRelativeMinutes(selectedItem.dataFreshness)}</span>
+                      <span className="font-mono text-on-surface">
+                        {formatRelativeMinutes(selectedItem.dataFreshness)}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Pair age</span>
-                      <span className="font-mono text-on-surface">{formatAgeMinutes(selectedItem.pair?.pairAgeMinutes)}</span>
+                      <span className="font-mono text-on-surface">
+                        {formatAgeMinutes(selectedItem.pair?.pairAgeMinutes)}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Liquidity</span>
-                      <span className="font-mono text-on-surface">{formatCurrency(selectedItem.market?.liquidityUsd)}</span>
+                      <span className="font-mono text-on-surface">
+                        {formatCurrency(selectedItem.market?.liquidityUsd)}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">1h Volume</span>
-                      <span className="font-mono text-on-surface">{formatCurrency(selectedItem.market?.volume1hUsd)}</span>
+                      <span className="font-mono text-on-surface">
+                        {formatCurrency(selectedItem.market?.volume1hUsd)}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Detected</span>
-                      <span className="font-mono text-on-surface">{formatRelativeMinutes(selectedItem.detectedAt)}</span>
+                      <span className="font-mono text-on-surface">
+                        {formatRelativeMinutes(selectedItem.detectedAt)}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Queue posture</span>
@@ -848,21 +1056,27 @@ export default function ScannerPage() {
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Wallet evidence</span>
                       <span className="font-mono text-on-surface">
-                        {selectedItem.walletEvidence.qualifiedWalletCount}/{selectedItem.walletEvidence.walletCount} qualified
+                        {selectedItem.walletEvidence.qualifiedWalletCount}/
+                        {selectedItem.walletEvidence.walletCount} qualified
                       </span>
                     </div>
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Trades indexed</span>
-                      <span className="font-mono text-on-surface">{selectedItem.walletEvidence.tradeCount}</span>
+                      <span className="font-mono text-on-surface">
+                        {selectedItem.walletEvidence.tradeCount}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between py-1 text-sm">
                       <span className="text-on-surface-variant">Top holder</span>
-                      <span className={[
-                        "font-mono",
-                        selectedItem.holderEvidence.topHolderConcentrationPct !== null && selectedItem.holderEvidence.topHolderConcentrationPct >= 50
-                          ? "text-destructive"
-                          : "text-on-surface",
-                      ].join(" ")}>
+                      <span
+                        className={[
+                          "font-mono",
+                          selectedItem.holderEvidence.topHolderConcentrationPct !== null &&
+                          selectedItem.holderEvidence.topHolderConcentrationPct >= 50
+                            ? "text-destructive"
+                            : "text-on-surface",
+                        ].join(" ")}
+                      >
                         {selectedItem.holderEvidence.topHolderConcentrationPct === null
                           ? "Not enriched"
                           : `${selectedItem.holderEvidence.topHolderConcentrationPct.toFixed(1)}%`}
@@ -896,6 +1110,21 @@ export default function ScannerPage() {
                   <Zap className="h-4 w-4" />
                   Open Research
                 </Link>
+                <div className="grid grid-cols-2 gap-2">
+                  <Link
+                    href={`/watchlists?type=token&address=${selectedItem.tokenAddress}&note=${encodeURIComponent(`Scanner score ${selectedItem.signalScore}`)}`}
+                    className="flex min-h-10 items-center justify-center gap-2 rounded-sm border border-outline bg-surface px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface hover:border-primary/50 hover:text-primary"
+                  >
+                    <BookmarkPlus className="h-3.5 w-3.5" />
+                    Watch
+                  </Link>
+                  <Link
+                    href="/wallets"
+                    className="flex min-h-10 items-center justify-center gap-2 rounded-sm border border-outline bg-surface px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface hover:border-primary/50 hover:text-primary"
+                  >
+                    Wallet evidence
+                  </Link>
+                </div>
               </>
             ) : (
               <div className="rounded-sm border border-outline bg-surface px-4 py-8 text-center">

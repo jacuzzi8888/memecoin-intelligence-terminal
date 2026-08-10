@@ -29,7 +29,10 @@ interface SystemStatus {
     latestSnapshotAt: string | null;
     latestSignalAt: string | null;
   };
-  queues: Record<string, { waiting: number; active: number; failed: number; deadLetter: number; available?: boolean }>;
+  queues: Record<
+    string,
+    { waiting: number; active: number; failed: number; deadLetter: number; available?: boolean }
+  >;
 }
 
 const desktopNavItems = [
@@ -83,7 +86,11 @@ function NavLink({
           : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
       ].join(" ")}
     >
-      <Icon className={["h-[18px] w-[18px]", active ? "text-primary" : "group-hover:text-primary"].join(" ")} />
+      <Icon
+        className={["h-[18px] w-[18px]", active ? "text-primary" : "group-hover:text-primary"].join(
+          " ",
+        )}
+      />
       <span className="text-sm font-medium">{label}</span>
     </Link>
   );
@@ -102,7 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const fetchStatus = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/v1/status`, { cache: "no-store" });
-        const payload = await response.json() as { success?: boolean; data?: SystemStatus };
+        const payload = (await response.json()) as { success?: boolean; data?: SystemStatus };
         if (active && response.ok && payload.success && payload.data) {
           setStatus(payload.data);
           setStatusOnline(true);
@@ -132,19 +139,37 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", focusSearch);
   }, []);
 
-  const latestDataAt = status?.dataFreshness?.latestSnapshotAt || status?.dataFreshness?.latestSignalAt;
-  const latestDataAgeSeconds = latestDataAt ? Math.max(0, Math.floor((Date.now() - new Date(latestDataAt).getTime()) / 1000)) : null;
+  const latestDataAt =
+    status?.dataFreshness?.latestSnapshotAt || status?.dataFreshness?.latestSignalAt;
+  const latestDataAgeSeconds = latestDataAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(latestDataAt).getTime()) / 1000))
+    : null;
   const dataFresh = latestDataAgeSeconds !== null && latestDataAgeSeconds <= 120;
-  const deadLetters = status ? Object.values(status.queues).reduce((total, queue) => total + queue.deadLetter, 0) : 0;
-  const queuesAvailable = status ? Object.values(status.queues).every((queue) => queue.available !== false) : false;
-  const systemState = !statusOnline ? "Offline" : dataFresh && deadLetters === 0 && queuesAvailable ? "Live" : "Degraded";
-  const stateTone = systemState === "Live" ? "text-success" : systemState === "Degraded" ? "text-warning" : "text-destructive";
+  const deadLetters = status
+    ? Object.values(status.queues).reduce((total, queue) => total + queue.deadLetter, 0)
+    : 0;
+  const queuesAvailable = status
+    ? Object.values(status.queues).every((queue) => queue.available !== false)
+    : false;
+  const systemState = !statusOnline
+    ? "Offline"
+    : dataFresh && queuesAvailable
+      ? "Live"
+      : "Degraded";
+  const stateTone =
+    systemState === "Live"
+      ? "text-success"
+      : systemState === "Degraded"
+        ? "text-warning"
+        : "text-destructive";
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = searchQuery.trim();
     if (!query) return;
-    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(query)) {
+    if (query.toLowerCase().startsWith("wallet:")) {
+      router.push(`/wallets?address=${encodeURIComponent(query.slice(7).trim())}`);
+    } else if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(query)) {
       router.push(`/tokens/${encodeURIComponent(query)}`);
     } else {
       router.push(`/scanner?search=${encodeURIComponent(query)}`);
@@ -160,7 +185,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <TerminalSquare className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-sans text-lg font-bold tracking-tight text-primary">AEGIS TERMINAL</p>
+              <p className="font-sans text-lg font-bold tracking-tight text-primary">
+                AEGIS TERMINAL
+              </p>
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">
                 Institutional Grade
               </p>
@@ -214,50 +241,73 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div className="h-4 w-px bg-outline" />
             <div className="font-mono text-[13px] text-on-surface-variant">
-              Data age: <span className="text-on-surface">{latestDataAgeSeconds === null ? "--" : `${latestDataAgeSeconds}s`}</span>
+              Data age:{" "}
+              <span className="text-on-surface">
+                {latestDataAgeSeconds === null ? "--" : `${latestDataAgeSeconds}s`}
+              </span>
             </div>
             <div className="h-4 w-px bg-outline" />
             <div className="font-mono text-[13px] text-on-surface-variant">
-              Pending: <span className="text-on-surface">{status?.pendingAlerts ?? "--"}</span>
+              Alerts: <span className="text-on-surface">{status?.pendingAlerts ?? "--"}</span>
               {deadLetters > 0 ? (
                 <>
-                  {" / "}DLQ: <span className="text-warning">{deadLetters}</span>
+                  {" / "}Jobs to review: <span className="text-warning">{deadLetters}</span>
                 </>
               ) : null}
             </div>
           </div>
 
           <div className="flex items-center gap-3 lg:ml-auto">
-            <form onSubmit={submitSearch} role="search" className="hidden h-9 w-[280px] items-center gap-2 rounded-sm border border-outline bg-surface-container px-3 lg:flex">
+            <form
+              onSubmit={submitSearch}
+              role="search"
+              className="hidden h-9 w-[280px] items-center gap-2 rounded-sm border border-outline bg-surface-container px-3 lg:flex"
+            >
               <Search className="h-4 w-4 text-on-surface-variant" />
               <input
                 id="global-search"
                 aria-label="Search"
-                placeholder="Search tokens, wallets, rules..."
+                placeholder="Token, symbol, or wallet:ADDRESS"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="w-full bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60"
               />
               <div className="flex items-center gap-1 font-mono text-[11px] text-on-surface-variant/80">
-                <Command className="h-3.5 w-3.5" />
-                K
+                <Command className="h-3.5 w-3.5" />K
               </div>
             </form>
 
-            <Link href="/terminal" aria-label="Open terminal" title="Terminal" className="rounded-sm p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface">
+            <Link
+              href="/terminal"
+              aria-label="Open terminal"
+              title="Terminal"
+              className="rounded-sm p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+            >
               <Bot className="h-4 w-4" />
             </Link>
-            <Link href="/settings" aria-label="Open personal access settings" title="Personal access" className="rounded-sm p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface">
+            <Link
+              href="/settings"
+              aria-label="Open personal access settings"
+              title="Personal access"
+              className="rounded-sm p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+            >
               <Shield className="h-4 w-4" />
             </Link>
-            <Link href="/dashboard" aria-label="Open system status" title="System status" className={`rounded-sm p-2 transition-colors hover:bg-surface-container ${stateTone}`}>
+            <Link
+              href="/dashboard"
+              aria-label="Open system status"
+              title="System status"
+              className={`rounded-sm p-2 transition-colors hover:bg-surface-container ${stateTone}`}
+            >
               <Network className="h-4 w-4" />
             </Link>
 
             <div className="h-6 w-px bg-outline" />
 
             <div className="flex items-center gap-2 rounded-sm border border-primary-container/50 bg-primary-container/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-primary">
-              <span className={`h-2 w-2 rounded-full ${statusOnline ? "bg-success" : "bg-destructive"}`} />
+              <span
+                className={`h-2 w-2 rounded-full ${statusOnline ? "bg-success" : "bg-destructive"}`}
+              />
               Mainnet
             </div>
           </div>
@@ -265,14 +315,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="pb-[88px] lg:ml-sidebar lg:pb-10">
-        <div className="min-h-[calc(100vh-96px)] px-standard py-standard md:px-grid">{children}</div>
+        <div className="min-h-[calc(100vh-96px)] px-standard py-standard md:px-grid">
+          {children}
+        </div>
       </main>
 
       <footer className="fixed inset-x-0 bottom-16 z-30 border-t border-outline bg-surface-lowest/95 backdrop-blur lg:bottom-0 lg:left-sidebar">
         <div className="flex h-8 items-center justify-between px-standard md:px-grid">
           <div className={`flex items-center gap-2 font-mono text-[12px] ${stateTone}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${statusOnline ? (dataFresh ? "bg-success" : "bg-warning") : "bg-destructive"}`} />
-            <span className="hidden sm:inline">System: {systemState} | Data: {latestDataAgeSeconds === null ? "unavailable" : `${latestDataAgeSeconds}s old`} | Chain: SOL-Mainnet</span>
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${statusOnline ? (dataFresh ? "bg-success" : "bg-warning") : "bg-destructive"}`}
+            />
+            <span className="hidden sm:inline">
+              Market: {systemState} | Data:{" "}
+              {latestDataAgeSeconds === null ? "unavailable" : `${latestDataAgeSeconds}s old`} |
+              Chain: SOL-Mainnet
+              {deadLetters > 0 ? ` | ${deadLetters} jobs need review` : ""}
+            </span>
             <span className="sm:hidden">System {systemState}</span>
           </div>
           <div className="hidden items-center gap-4 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant sm:flex">
@@ -295,7 +354,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   onClick={() => setMobileMoreOpen(false)}
                   className={[
                     "flex items-center gap-3 rounded-sm px-3 py-3 text-sm transition-colors",
-                    isActive(pathname, item.match) ? "bg-primary-container/15 text-primary" : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
+                    isActive(pathname, item.match)
+                      ? "bg-primary-container/15 text-primary"
+                      : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
                   ].join(" ")}
                 >
                   <Icon className="h-4 w-4" />
@@ -319,10 +380,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ].join(" ")}
               >
                 <Icon className="h-[18px] w-[18px]" />
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em]">{item.label}</span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em]">
+                  {item.label}
+                </span>
               </Link>
-              );
-            })}
+            );
+          })}
           <button
             type="button"
             aria-haspopup="menu"
@@ -330,7 +393,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setMobileMoreOpen((open) => !open)}
             className={[
               "flex flex-col items-center justify-center gap-1 transition-colors",
-              mobileMoreOpen || mobileMoreItems.some((item) => isActive(pathname, item.match)) ? "text-primary" : "text-on-surface-variant",
+              mobileMoreOpen || mobileMoreItems.some((item) => isActive(pathname, item.match))
+                ? "text-primary"
+                : "text-on-surface-variant",
             ].join(" ")}
           >
             <MoreHorizontal className="h-[18px] w-[18px]" />

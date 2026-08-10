@@ -29,7 +29,7 @@ DexScreener requests now use list caching, stale fallback, token batching, dedup
 
 ### KI-008: Automated browser coverage is limited
 **Severity**: Low
-The web app has unit and production-build coverage, but repeatable end-to-end tests should be expanded for mobile layouts, scanner filtering, unlock behavior, and degraded API states.
+The web app has unit, production-build, and manual route coverage, but repeatable end-to-end tests should be expanded for mobile layouts, scanner filtering, cross-page investigation links, unlock behavior, and degraded API states.
 
 ### KI-009: Trading is intentionally unavailable
 **Severity**: Expected
@@ -37,7 +37,11 @@ The terminal is preparation-only. Jupiter quotes, wallet connection, simulation,
 
 ### KI-010: Wallet-sync dead letters need operator review
 **Severity**: Medium
-The production wallet queue contains failed jobs from provider-limited sync attempts. The system reports this honestly as degraded until the failed jobs are reviewed and retried or superseded; they should not be silently cleared.
+The production wallet queue contains failed jobs from provider-limited sync attempts. Worker health reports these for operator review, but they no longer incorrectly mark otherwise-fresh market data as globally degraded. The failed jobs should be reviewed and retried or superseded, not silently cleared.
+
+### KI-011: Wallet relationships and clusters are not implemented
+**Severity**: High
+Wallet performance, legitimacy, qualification, positions, and recent activity are available, but funding relationships, cluster membership, and graph evidence required by FR-2 are not yet produced by the backend. The UI reports this evidence as unavailable rather than inferring or fabricating relationships. This must be completed before the Phase 2 evidence gate can pass.
 
 ## Resolved in Production
 

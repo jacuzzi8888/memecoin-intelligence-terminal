@@ -1,15 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   Activity,
-  AlertTriangle,
   ArrowUpRight,
   BarChart3,
   Flame,
   Lock,
-  Route,
   ShieldCheck,
   Wallet,
   Zap,
@@ -30,6 +29,7 @@ import {
   scoreTone,
   shortAddress,
 } from "@/components/aegis-ui";
+import { ActionLink, EvidenceBar, ModuleNotice } from "@/components/workflow-ui";
 
 interface TokenPayload {
   token: {
@@ -176,7 +176,9 @@ export default function TokenPage() {
       <div className="space-y-4">
         <ErrorState title="Research unavailable" message={error ?? "Token not found."} />
         <Panel title="Requested Token" icon={<Activity className="h-4 w-4" />}>
-          <div className="break-all p-standard font-mono text-sm text-on-surface-variant">{address}</div>
+          <div className="break-all p-standard font-mono text-sm text-on-surface-variant">
+            {address}
+          </div>
         </Panel>
       </div>
     );
@@ -184,22 +186,40 @@ export default function TokenPage() {
 
   const { token, market, launch, intelligence } = data;
   const allFactors = [
-    ...(intelligence?.positiveFactors ?? []).map((factor) => ({ ...factor, tone: "success" as const })),
-    ...(intelligence?.negativeFactors ?? []).map((factor) => ({ ...factor, tone: "danger" as const })),
+    ...(intelligence?.positiveFactors ?? []).map((factor) => ({
+      ...factor,
+      tone: "success" as const,
+    })),
+    ...(intelligence?.negativeFactors ?? []).map((factor) => ({
+      ...factor,
+      tone: "danger" as const,
+    })),
   ];
-  const staleMarket = market?.snapshotAt ? Date.now() - new Date(market.snapshotAt).getTime() > 5 * 60 * 1000 : true;
-  const chartValues = data.chart.length > 0 ? data.chart : market ? [{
-    marketCapUsd: market.marketCapUsd,
-    priceUsd: market.priceUsd,
-    volume1hUsd: market.volume1hUsd,
-    volume24hUsd: market.volume24hUsd,
-    liquidityUsd: market.liquidityUsd,
-    holderCount: market.holderCount,
-    priceChange1h: market.priceChange1h,
-    priceChange24h: market.priceChange24h,
-    snapshotAt: market.snapshotAt,
-  }] : [];
-  const maxVolume = Math.max(...chartValues.map((point) => point.volume1hUsd || point.volume24hUsd || 0), 1);
+  const staleMarket = market?.snapshotAt
+    ? Date.now() - new Date(market.snapshotAt).getTime() > 5 * 60 * 1000
+    : true;
+  const chartValues =
+    data.chart.length > 0
+      ? data.chart
+      : market
+        ? [
+            {
+              marketCapUsd: market.marketCapUsd,
+              priceUsd: market.priceUsd,
+              volume1hUsd: market.volume1hUsd,
+              volume24hUsd: market.volume24hUsd,
+              liquidityUsd: market.liquidityUsd,
+              holderCount: market.holderCount,
+              priceChange1h: market.priceChange1h,
+              priceChange24h: market.priceChange24h,
+              snapshotAt: market.snapshotAt,
+            },
+          ]
+        : [];
+  const maxVolume = Math.max(
+    ...chartValues.map((point) => point.volume1hUsd || point.volume24hUsd || 0),
+    1,
+  );
   const chartPrices = chartValues.map((point) => point.priceUsd).filter((value) => value > 0);
   const chartMinPrice = chartPrices.length > 0 ? Math.min(...chartPrices) : null;
   const chartMaxPrice = chartPrices.length > 0 ? Math.max(...chartPrices) : null;
@@ -220,12 +240,21 @@ export default function TokenPage() {
                   <p className="text-sm text-on-surface-variant">{token.name} - SOL</p>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <p className="font-mono text-xl text-success">{formatTokenPrice(market?.priceUsd)}</p>
-                  <p className={["flex items-center gap-1 font-mono text-sm", (market?.priceChange24h ?? 0) >= 0 ? "text-success" : "text-destructive"].join(" ")}>
+                  <p className="font-mono text-xl text-success">
+                    {formatTokenPrice(market?.priceUsd)}
+                  </p>
+                  <p
+                    className={[
+                      "flex items-center gap-1 font-mono text-sm",
+                      (market?.priceChange24h ?? 0) >= 0 ? "text-success" : "text-destructive",
+                    ].join(" ")}
+                  >
                     <ArrowUpRight className="h-4 w-4" />
                     {formatNumber(market?.priceChange24h)}%
                   </p>
-                  <span className="font-mono text-xs text-on-surface-variant">{shortAddress(token.address, 8, 6)}</span>
+                  <span className="font-mono text-xs text-on-surface-variant">
+                    {shortAddress(token.address, 8, 6)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -245,47 +274,69 @@ export default function TokenPage() {
               </StatusBadge>
             </div>
           </div>
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-outline pt-4">
+            <ActionLink
+              href={`/watchlists?type=token&address=${token.address}&note=${encodeURIComponent(`Research score ${intelligence?.score ?? "unscored"}`)}`}
+              tone="primary"
+            >
+              Add to watchlist
+            </ActionLink>
+            <ActionLink href={`/scanner?search=${token.address}`}>Return to scanner</ActionLink>
+            <ActionLink href="/alerts">Review related alerts</ActionLink>
+          </div>
         </section>
 
         <Panel title="Price Action and Volume Profile" icon={<BarChart3 className="h-4 w-4" />}>
           <div className="p-standard">
             <div className="relative min-h-[360px] overflow-hidden rounded-sm border border-outline bg-surface">
               <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(67,70,85,0.28)_1px,transparent_1px),linear-gradient(to_bottom,rgba(67,70,85,0.28)_1px,transparent_1px)] bg-[size:40px_40px]" />
-              {canChart ? <>
-              <div className="absolute inset-x-6 bottom-12 flex h-36 items-end gap-2 opacity-50">
-                {chartValues.map((point, index) => {
-                  const volume = point.volume1hUsd || point.volume24hUsd || 0;
-                  const height = Math.max(12, Math.round((volume / maxVolume) * 100));
-                  const change = point.priceChange1h || point.priceChange24h || 0;
-                  return (
-                  <div
-                    key={index}
-                    className={`flex-1 ${change < 0 ? "bg-destructive" : "bg-success"}`}
-                    style={{ height: `${height}%` }}
-                  />
-                  );
-                })}
-              </div>
-              <svg className="absolute inset-0 h-full w-full text-primary" viewBox="0 0 100 50" preserveAspectRatio="none">
-                <path
-                  d={chartPath(chartValues) ?? ""}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                />
-              </svg>
-              </> : (
+              {canChart ? (
+                <>
+                  <div className="absolute inset-x-6 bottom-12 flex h-36 items-end gap-2 opacity-50">
+                    {chartValues.map((point, index) => {
+                      const volume = point.volume1hUsd || point.volume24hUsd || 0;
+                      const height = Math.max(12, Math.round((volume / maxVolume) * 100));
+                      const change = point.priceChange1h || point.priceChange24h || 0;
+                      return (
+                        <div
+                          key={index}
+                          className={`flex-1 ${change < 0 ? "bg-destructive" : "bg-success"}`}
+                          style={{ height: `${height}%` }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <svg
+                    className="absolute inset-0 h-full w-full text-primary"
+                    viewBox="0 0 100 50"
+                    preserveAspectRatio="none"
+                  >
+                    <path
+                      d={chartPath(chartValues) ?? ""}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1"
+                    />
+                  </svg>
+                </>
+              ) : (
                 <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
                   <div className="rounded-sm border border-outline bg-surface-container/95 px-5 py-4">
                     <p className="font-semibold text-on-surface">Price history is still forming</p>
-                    <p className="mt-2 text-sm text-on-surface-variant">At least two verified snapshots are required before a chart is drawn.</p>
+                    <p className="mt-2 text-sm text-on-surface-variant">
+                      At least two verified snapshots are required before a chart is drawn.
+                    </p>
                   </div>
                 </div>
               )}
               <div className="absolute bottom-0 left-0 right-0 flex h-8 items-center justify-between border-t border-outline bg-surface/90 px-4 font-mono text-[11px] text-on-surface-variant">
-                <span>{chartValues[0] ? formatRelative(chartValues[0].snapshotAt) : "No history"}</span>
+                <span>
+                  {chartValues[0] ? formatRelative(chartValues[0].snapshotAt) : "No history"}
+                </span>
                 <span>Snapshot series</span>
-                <span>{chartValues.at(-1) ? formatRelative(chartValues.at(-1)!.snapshotAt) : "Now"}</span>
+                <span>
+                  {chartValues.at(-1) ? formatRelative(chartValues.at(-1)!.snapshotAt) : "Now"}
+                </span>
               </div>
               <div className="absolute right-0 top-0 flex h-full w-14 flex-col justify-between border-l border-outline bg-surface/80 py-4 pr-2 text-right font-mono text-[11px] text-on-surface-variant">
                 <span>{formatTokenPrice(chartMaxPrice)}</span>
@@ -304,10 +355,22 @@ export default function TokenPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <MetricCard label="Evidence Wallets" value={data.walletEvidenceSummary.walletCount} tone={data.walletEvidenceSummary.walletCount ? "primary" : "default"} />
-          <MetricCard label="Qualified Wallets" value={data.walletEvidenceSummary.qualifiedWalletCount} tone={data.walletEvidenceSummary.qualifiedWalletCount ? "success" : "default"} />
+          <MetricCard
+            label="Evidence Wallets"
+            value={data.walletEvidenceSummary.walletCount}
+            tone={data.walletEvidenceSummary.walletCount ? "primary" : "default"}
+          />
+          <MetricCard
+            label="Qualified Wallets"
+            value={data.walletEvidenceSummary.qualifiedWalletCount}
+            tone={data.walletEvidenceSummary.qualifiedWalletCount ? "success" : "default"}
+          />
           <MetricCard label="Indexed Trades" value={data.walletEvidenceSummary.tradeCount} />
-          <MetricCard label="Latest Wallet Trade" value={formatRelative(data.walletEvidenceSummary.latestTradeAt)} tone={data.walletEvidenceSummary.latestTradeAt ? "success" : "stale"} />
+          <MetricCard
+            label="Latest Wallet Trade"
+            value={formatRelative(data.walletEvidenceSummary.latestTradeAt)}
+            tone={data.walletEvidenceSummary.latestTradeAt ? "success" : "stale"}
+          />
         </div>
 
         {staleMarket ? (
@@ -320,7 +383,10 @@ export default function TokenPage() {
         <div className="grid gap-4 md:grid-cols-3">
           {allFactors.length > 0 ? (
             allFactors.slice(0, 3).map((factor) => (
-              <div key={`${factor.factorName}-${factor.contribution}`} className="rounded-lg border border-outline bg-surface-container p-standard">
+              <div
+                key={`${factor.factorName}-${factor.contribution}`}
+                className="rounded-lg border border-outline bg-surface-container p-standard"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-base font-semibold text-on-surface">{factor.factorName}</h3>
                   <StatusBadge tone={factor.tone === "success" ? "success" : "danger"}>
@@ -329,13 +395,18 @@ export default function TokenPage() {
                   </StatusBadge>
                 </div>
                 <p className="mt-4 font-mono text-sm text-on-surface-variant">
-                  Raw: {typeof factor.rawValue === "object" ? JSON.stringify(factor.rawValue) : String(factor.rawValue ?? "n/a")}
+                  Raw:{" "}
+                  {typeof factor.rawValue === "object"
+                    ? JSON.stringify(factor.rawValue)
+                    : String(factor.rawValue ?? "n/a")}
                 </p>
               </div>
             ))
           ) : (
             <div className="rounded-lg border border-outline bg-surface-container p-standard md:col-span-3">
-              <p className="text-sm text-on-surface-variant">No factor breakdown is stored for this token yet.</p>
+              <p className="text-sm text-on-surface-variant">
+                No factor breakdown is stored for this token yet.
+              </p>
             </div>
           )}
         </div>
@@ -357,31 +428,51 @@ export default function TokenPage() {
                 {data.walletEvidence.length > 0 ? (
                   data.walletEvidence.slice(0, 10).map((trade, index) => (
                     <tr key={trade.id} className="hover:bg-surface-high">
-                      <td className="px-standard py-3 font-mono text-on-surface-variant">#{index + 1}</td>
+                      <td className="px-standard py-3 font-mono text-on-surface-variant">
+                        #{index + 1}
+                      </td>
                       <td className="px-standard py-3">
-                        <p className="font-mono text-primary">{shortAddress(trade.walletAddress)}</p>
+                        <Link
+                          href={`/wallets?address=${trade.walletAddress}`}
+                          className="font-mono text-primary hover:underline"
+                        >
+                          {shortAddress(trade.walletAddress)}
+                        </Link>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <span className="text-xs text-on-surface-variant">{trade.walletLabel || trade.walletClassification}</span>
+                          <span className="text-xs text-on-surface-variant">
+                            {trade.walletLabel || trade.walletClassification}
+                          </span>
                           <StatusBadge tone={trade.isQualified ? "success" : "default"}>
                             {trade.isQualified ? "Qualified" : "Unqualified"}
                           </StatusBadge>
                         </div>
                       </td>
-                      <td className={`px-standard py-3 text-right font-mono ${scoreTone(trade.walletScore)}`}>
+                      <td
+                        className={`px-standard py-3 text-right font-mono ${scoreTone(trade.walletScore)}`}
+                      >
                         {trade.walletScore ?? "--"}
                       </td>
-                      <td className={`px-standard py-3 text-right font-mono ${trade.tradeType.toLowerCase().includes("sell") ? "text-destructive" : "text-success"}`}>
+                      <td
+                        className={`px-standard py-3 text-right font-mono ${trade.tradeType.toLowerCase().includes("sell") ? "text-destructive" : "text-success"}`}
+                      >
                         {trade.tradeType} {formatCompact(trade.amount)}
                       </td>
-                      <td className="px-standard py-3 text-right font-mono text-on-surface">{formatUsd(trade.valueUsd)}</td>
-                      <td className={`px-standard py-3 text-right font-mono ${(trade.totalPnlUsd ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                      <td className="px-standard py-3 text-right font-mono text-on-surface">
+                        {formatUsd(trade.valueUsd)}
+                      </td>
+                      <td
+                        className={`px-standard py-3 text-right font-mono ${(trade.totalPnlUsd ?? 0) >= 0 ? "text-success" : "text-destructive"}`}
+                      >
                         {formatUsd(trade.totalPnlUsd)}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-standard py-8 text-center text-sm text-on-surface-variant">
+                    <td
+                      colSpan={6}
+                      className="px-standard py-8 text-center text-sm text-on-surface-variant"
+                    >
                       No wallet trade evidence has been indexed for this token yet.
                     </td>
                   </tr>
@@ -398,18 +489,30 @@ export default function TokenPage() {
                 <div key={`${event.type}-${event.id}`} className="px-standard py-3">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <StatusBadge tone={event.type === "alert" ? "warning" : event.type === "signal" ? "primary" : "default"}>
+                      <StatusBadge
+                        tone={
+                          event.type === "alert"
+                            ? "warning"
+                            : event.type === "signal"
+                              ? "primary"
+                              : "default"
+                        }
+                      >
                         {event.type}
                       </StatusBadge>
                       <p className="mt-2 font-semibold text-on-surface">{event.title}</p>
                       <p className="mt-1 text-sm text-on-surface-variant">{event.detail}</p>
                     </div>
-                    <span className="shrink-0 font-mono text-[11px] text-on-surface-variant">{formatRelative(event.occurredAt)}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-on-surface-variant">
+                      {formatRelative(event.occurredAt)}
+                    </span>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="p-standard text-sm text-on-surface-variant">No timeline events have been indexed for this token yet.</div>
+              <div className="p-standard text-sm text-on-surface-variant">
+                No timeline events have been indexed for this token yet.
+              </div>
             )}
           </div>
         </Panel>
@@ -419,35 +522,60 @@ export default function TokenPage() {
         <Panel title="Intelligence" icon={<Activity className="h-4 w-4" />}>
           <div className="space-y-4 p-standard">
             <div className="rounded-sm border border-outline bg-surface px-4 py-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Signal Score</p>
-              <p className={`mt-2 font-mono text-4xl tabular-nums ${scoreTone(intelligence?.score)}`}>
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+                Signal Score
+              </p>
+              <p
+                className={`mt-2 font-mono text-4xl tabular-nums ${scoreTone(intelligence?.score)}`}
+              >
                 {intelligence?.score ?? 0}
               </p>
               <p className="mt-2 text-sm text-on-surface-variant">
-                {intelligence ? `${Math.round(intelligence.confidence * 100)}% confidence via ${intelligence.rulesetVersion}` : "No active signal stored"}
+                {intelligence
+                  ? `${Math.round(intelligence.confidence * 100)}% confidence via ${intelligence.rulesetVersion}`
+                  : "No active signal stored"}
               </p>
+              <div className="mt-4">
+                <EvidenceBar
+                  label="Evidence confidence"
+                  value={intelligence?.confidence ?? null}
+                  detail="Confidence reflects available inputs; it is not a probability of profit."
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <MetricCard label="Priority" value={intelligence?.priority ?? "None"} tone="warning" />
+              <MetricCard
+                label="Priority"
+                value={intelligence?.priority ?? "None"}
+                tone="warning"
+              />
               <MetricCard label="Detected" value={formatRelative(intelligence?.detectedAt)} />
             </div>
 
             {launch ? (
               <div className="rounded-sm border border-outline bg-surface px-3 py-3 text-sm">
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Launch</p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+                  Launch
+                </p>
                 <div className="mt-3 space-y-2">
                   <div className="flex justify-between gap-3">
                     <span className="text-on-surface-variant">Deployer</span>
-                    <span className="font-mono text-primary">{shortAddress(launch.deployerAddress)}</span>
+                    <span className="font-mono text-primary">
+                      {shortAddress(launch.deployerAddress)}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-on-surface-variant">Initial LP</span>
-                    <span className="font-mono text-on-surface">{formatUsd(launch.initialLiquidityUsd)}</span>
+                    <span className="font-mono text-on-surface">
+                      {formatUsd(launch.initialLiquidityUsd)}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-on-surface-variant">Age</span>
-                    <span className="font-mono text-on-surface">{formatRelative(launch.launchedAt)}</span>
+                    <span className="font-mono text-on-surface">
+                      {formatRelative(launch.launchedAt)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -455,45 +583,21 @@ export default function TokenPage() {
           </div>
         </Panel>
 
-        <Panel title="Execution" icon={<Zap className="h-4 w-4" />}>
+        <Panel title="Decision Actions" icon={<Zap className="h-4 w-4" />}>
           <div className="space-y-4 p-standard">
-            <div className="grid grid-cols-2 gap-1 rounded-sm border border-outline bg-surface p-1">
-              <button className="rounded-sm bg-success/20 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-success">Buy</button>
-              <button className="rounded-sm py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Sell</button>
-            </div>
-            <label className="block">
-              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Pay SOL</span>
-              <input className="mt-2 h-10 w-full rounded-sm border border-outline bg-surface px-3 text-right font-mono text-on-surface outline-none focus:border-primary" defaultValue="10.00" />
-            </label>
-            <label className="block">
-              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Receive {token.symbol}</span>
-              <input className="mt-2 h-10 w-full rounded-sm border border-outline bg-surface px-3 text-right font-mono text-on-surface outline-none" readOnly value={market?.priceUsd ? formatNumber(10 / market.priceUsd) : "n/a"} />
-            </label>
-            <div className="rounded-sm border border-outline bg-surface px-3 py-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-on-surface-variant">Route</span>
-                <span className="flex items-center gap-1 font-mono text-on-surface">
-                  Not requested <Route className="h-3.5 w-3.5 text-on-surface-variant" />
-                </span>
-              </div>
-              <div className="mt-2 flex justify-between">
-                <span className="text-on-surface-variant">Slippage</span>
-                <span className="font-mono text-on-surface-variant">Not set</span>
-              </div>
-              <div className="mt-2 flex justify-between">
-                <span className="text-on-surface-variant">Network fee</span>
-                <span className="font-mono text-on-surface-variant">Unknown</span>
-              </div>
-            </div>
-            <button disabled className="w-full rounded-sm border border-outline bg-surface-container px-4 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant opacity-70">
-              Quote Unavailable
-            </button>
-            <div className="rounded-sm border border-warning/40 bg-warning/10 px-3 py-3 text-sm text-on-surface-variant">
-              <div className="flex gap-2">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                <p>Execution remains preparation-only until Phase 3 wallet and transaction controls are complete.</p>
-              </div>
-            </div>
+            <ActionLink
+              href={`/watchlists?type=token&address=${token.address}&note=${encodeURIComponent(`Research score ${intelligence?.score ?? "unscored"}`)}`}
+              tone="primary"
+            >
+              Monitor this token
+            </ActionLink>
+            <ActionLink href="/strategies">Evaluate with a strategy</ActionLink>
+            <ActionLink href={`/terminal?token=${token.address}`}>Open terminal context</ActionLink>
+            <ModuleNotice
+              tone="warning"
+              title="Execution intentionally locked"
+              message="No quote, slippage, fee, or receive amount is shown until Phase 3 provides a real Jupiter quote, simulation, wallet connection, and explicit signing."
+            />
           </div>
         </Panel>
       </aside>

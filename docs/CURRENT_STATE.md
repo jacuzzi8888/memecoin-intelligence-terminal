@@ -19,8 +19,12 @@
 - Scanner filters support timeframe, liquidity, market cap, volume, pair age, source, discovery source, priority, wallet evidence, qualified wallets, bundler exclusion, score, and text search.
 - Wallet Intelligence filters the discovered wallet set by score band, PnL band, and legitimacy, with score, PnL, win-rate, and recency ranking.
 - Research is an evidence workbench backed by current scanner observations, not a placeholder.
+- Dashboard, scanner, research, token, wallet, alert, watchlist, strategy, terminal, and settings surfaces now form one deep-linked investigation workflow instead of isolated pages.
+- The dashboard prioritizes operator queues and verified evidence; the previous decorative chart has been removed.
+- Scanner live refresh can be paused, saved views can be restored, result totals and pagination are explicit, and refresh failures retain the last verified ranking.
+- Settings uses guided Aegis controls for refresh, scanner timeframe, alert delivery, destinations, and write access; raw JSON configuration is no longer exposed.
 - Token and terminal surfaces do not draw synthetic price charts or show fabricated quotes, fees, TPS, gas, or latency.
-- Phase 3 trading remains disabled. No quote, signing, simulation, or transaction submission path is presented as live.
+- Terminal is an explicit Phase 3 readiness checklist. Buy, sell, signing, simulation, and transaction submission controls are not presented as live.
 
 ## Intelligence State
 
@@ -87,6 +91,8 @@ Verified in production on 2026-08-10:
 - Enter the saved personal key in Settings for each browser that will perform mutations; read-only market data remains public.
 - Review and retry or supersede the existing wallet-sync dead letters after confirming their provider failure causes.
 - Accumulate enough fresh wallet-enriched snapshots and reviewed alert outcomes to evaluate strategy edge.
+- Implement and validate funding-relationship and wallet-cluster evidence required by the PRD.
 - Improve launch coverage beyond DexScreener profiles/boosts if near-firehose coverage is required.
+- Add repeatable browser tests for the core investigation flow, responsive layouts, write unlock, and degraded-data retention.
 - Complete API/database performance and load testing after real dataset growth is observed.
 - Start final Phase 3 only after the evidence gate passes.

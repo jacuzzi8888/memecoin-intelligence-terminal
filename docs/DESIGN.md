@@ -1,6 +1,6 @@
 # Aegis Terminal Design System
 
-Last updated: July 27, 2026
+Last updated: August 10, 2026
 
 This document replaces the earlier exploratory UI brief. The final visual direction is locked to the Stitch exports built around the `Aegis Terminal / Institutional Grade` system.
 
@@ -256,7 +256,7 @@ The scanner is a dense table-first workflow with:
 
 Required implementation additions beyond the mockup:
 
-- saved views
+- saved views (implemented in browser-local form)
 - column visibility management
 - keyboard row navigation
 - stable live ordering with deferred ranking updates
@@ -266,13 +266,13 @@ Required implementation additions beyond the mockup:
 The final research direction is represented by the `token_research_wif_desktop` export:
 
 - token identity row with trust cluster
-- large analytical chart block
+- large analytical chart block only when a real historical series is available
 - factor cards for explainability
 - stale/degraded module treatment inside the evidence stack
 - wallet evidence table
 - integrated execution panel on the right
 
-This page defines the research-to-trade product posture.
+This page defines the research-to-decision posture until the Phase 3 evidence gate passes.
 
 ### 10.4 Wallets
 
@@ -320,10 +320,10 @@ Strategies should match the same terminal language:
 
 ### 10.8 Terminal
 
-Terminal remains execution-ready, but in the final design language it should still feel like part of the same app:
+Terminal remains a Phase 3 readiness surface, but in the final design language it should still feel like part of the same app:
 
 - token selection and pricing context first
-- execution controls second
+- evidence and safety gates second
 - supporting positions and signal context nearby
 
 The standalone mobile trading export is visually useful, but its interaction model should be adjusted to stay research-connected rather than becoming a generic exchange ticket.
@@ -335,7 +335,8 @@ Settings should keep the same surface logic:
 - compact panels
 - route and destination configuration
 - display and refresh defaults
-- trading defaults
+- personal write-access state
+- no raw JSON configuration in the primary interface
 
 ## 11. Locked Component Set
 
@@ -412,3 +413,16 @@ When implemented, the app should feel like the Stitch exports but with stronger 
 - stronger continuity between dashboard, scanner, research, wallets, and alerts
 
 The final implementation should preserve the Aegis Terminal look while making the workflows more complete than the original mockups.
+
+## 15. Implemented Workflow Contract
+
+The current operator flow is:
+
+1. Dashboard identifies opportunities, unresolved alerts, wallet movement, and affected worker state.
+2. Scanner narrows the observed market with explicit filters, saved views, freshness, and pauseable live refresh.
+3. Research compares candidates and exposes confidence, risk, and wallet-evidence gaps without inventing missing facts.
+4. Token dossiers, wallet intelligence, alerts, and watchlists preserve investigation context through deep links.
+5. Strategies are created as inactive drafts and cannot be activated until their own backtest satisfies the evidence gate.
+6. Terminal validates readiness only; buy, sell, simulation, signing, and submission controls remain absent until final Phase 3.
+
+Shared workflow components must provide consistent page headers, module notices, empty states, freshness labels, evidence meters, and operator actions. Refresh errors preserve the last verified payload and degrade only the affected module.

@@ -16,7 +16,8 @@ export function formatUsd(value: number | null | undefined) {
 export function formatTokenPrice(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "n/a";
   if (value === 0) return "$0";
-  if (Math.abs(value) >= 0.01) return `$${value.toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
+  if (Math.abs(value) >= 0.01)
+    return `$${value.toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
   return `$${value.toLocaleString("en-US", { minimumSignificantDigits: 2, maximumSignificantDigits: 6 })}`;
 }
 
@@ -27,7 +28,9 @@ export function formatNumber(value: number | null | undefined) {
 
 export function formatCompact(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(value)) return "n/a";
-  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(
+    value,
+  );
 }
 
 export function formatRelative(value: string | null | undefined) {
@@ -79,13 +82,17 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`overflow-hidden rounded-lg border border-outline bg-surface-container shadow-panel ${className}`}>
+    <section
+      className={`overflow-hidden rounded-lg border border-outline bg-surface-container shadow-panel ${className}`}
+    >
       <div className="flex items-center justify-between gap-3 border-b border-outline bg-surface-high px-standard py-3">
         <div className="flex min-w-0 items-center gap-2">
           {icon ? <span className="shrink-0 text-primary">{icon}</span> : null}
           <div className="min-w-0">
             {eyebrow ? (
-              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">{eyebrow}</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                {eyebrow}
+              </p>
             ) : null}
             <h2 className="truncate text-base font-semibold text-on-surface">{title}</h2>
           </div>
@@ -119,7 +126,9 @@ export function MetricCard({
 
   return (
     <div className="rounded-sm border border-outline bg-surface px-3 py-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
+        {label}
+      </p>
       <p className={`mt-2 font-mono text-xl tabular-nums ${toneClass}`}>{value}</p>
       {detail ? <p className="mt-1 text-xs text-on-surface-variant">{detail}</p> : null}
     </div>
@@ -143,7 +152,9 @@ export function StatusBadge({
   }[tone];
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] ${toneClass}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-sm border px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] ${toneClass}`}
+    >
       {children}
     </span>
   );
@@ -194,15 +205,25 @@ export function AegisSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
         className="group flex h-10 w-full items-center justify-between gap-3 rounded-sm border border-outline bg-[linear-gradient(135deg,hsl(var(--surface-container))_0%,hsl(var(--surface-lowest))_100%)] px-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-primary/50"
       >
         <span className="min-w-0">
-          <span className="block font-mono text-[9px] uppercase tracking-[0.18em] text-on-surface-variant">{label}</span>
+          <span className="block font-mono text-[9px] uppercase tracking-[0.18em] text-on-surface-variant">
+            {label}
+          </span>
           <span className="block truncate font-mono text-[12px] uppercase tracking-[0.12em] text-on-surface">
             {selected?.label ?? "Select"}
           </span>
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-primary transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-primary transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {open ? (
@@ -219,13 +240,16 @@ export function AegisSelect({
                 type="button"
                 role="option"
                 aria-selected={active}
+                tabIndex={0}
                 onClick={() => {
                   onChange(option.value);
                   setOpen(false);
                 }}
                 className={[
                   "flex w-full items-center justify-between gap-3 border-b border-outline/50 px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.12em] transition-colors last:border-b-0",
-                  active ? "bg-primary-container/20 text-primary" : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
+                  active
+                    ? "bg-primary-container/20 text-primary"
+                    : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
                 ].join(" ")}
               >
                 <span className="truncate">{option.label}</span>
@@ -243,13 +267,22 @@ export function LoadingRows({ rows = 3 }: { rows?: number }) {
   return (
     <div className="space-y-3">
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="h-24 animate-pulse rounded-lg border border-outline bg-surface-container" />
+        <div
+          key={index}
+          className="h-24 animate-pulse rounded-lg border border-outline bg-surface-container"
+        />
       ))}
     </div>
   );
 }
 
-export function ErrorState({ title = "Surface degraded", message }: { title?: string; message: string }) {
+export function ErrorState({
+  title = "Surface degraded",
+  message,
+}: {
+  title?: string;
+  message: string;
+}) {
   return (
     <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
       <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />

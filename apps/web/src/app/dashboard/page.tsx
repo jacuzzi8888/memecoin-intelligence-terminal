@@ -1,46 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
-  ArrowUpRight,
   BellRing,
-  Clock3,
   Database,
-  MoveRight,
-  ShieldAlert,
+  Radar,
+  ShieldCheck,
   Wallet,
+  Waypoints,
 } from "lucide-react";
+import {
+  LoadingRows,
+  MetricCard,
+  Panel,
+  StatusBadge,
+  formatRelative,
+  formatUsd,
+  scoreTone,
+  shortAddress,
+} from "@/components/aegis-ui";
+import {
+  ActionLink,
+  EmptyState,
+  FreshnessStamp,
+  ModuleNotice,
+  PageHeader,
+  RefreshButton,
+} from "@/components/workflow-ui";
 import { API_BASE_URL } from "@/lib/api-url";
-
-interface OverviewData {
-  tokens: number;
-  signals: number;
-  alerts: number;
-  wallets: number;
-}
-
-interface PipelineData {
-  rawEventsPending: number;
-  rawEventsFailed: number;
-  alertsPending: number;
-  alertsDelivered: number;
-  deliveriesDelivered: number;
-  deliveriesFailed: number;
-  failuresOpen: number;
-}
-
-interface SystemData {
-  environment: string;
-  version: string;
-  dataSourceSummary: string;
-}
 
 interface SignalItem {
   id: string;
   tokenAddress: string;
   tokenSymbol: string;
+  tokenName: string;
   signalScore: number;
   confidence: number;
   priority: string;
@@ -54,108 +49,37 @@ interface AlertItem {
   tokenAddress: string;
   priority: string;
   title: string;
+  message?: string;
   signalScore: number;
   status: string;
   triggeredAt: string;
-  dataSource: string;
-  dataFreshness: string;
-}
-
-interface WalletTradeItem {
-  id: string;
-  walletAddress: string;
-  tokenAddress: string;
-  tokenSymbol: string;
-  tradeType: string;
-  amount: string | number;
-  valueUsd: string | number | null;
-  tradedAt: string;
+  strategyName?: string;
 }
 
 interface DashboardData {
-  overview: OverviewData;
-  pipeline: PipelineData;
-  system: SystemData;
+  overview: { tokens: number; signals: number; alerts: number; wallets: number };
+  pipeline: {
+    rawEventsPending: number;
+    rawEventsFailed: number;
+    alertsPending: number;
+    alertsDelivered: number;
+    deliveriesDelivered: number;
+    deliveriesFailed: number;
+    failuresOpen: number;
+  };
+  system: { environment: string; version: string; dataSourceSummary: string };
   recentSignals: SignalItem[];
   recentAlerts: AlertItem[];
-  recentWalletTrades: WalletTradeItem[];
-}
-
-function formatShortTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatRelativeMinutes(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.max(0, Math.round(diffMs / 60000));
-
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-
-  return `${Math.round(diffHr / 24)}d ago`;
-}
-
-function priorityTone(priority: string) {
-  const normalized = priority.toLowerCase();
-
-  if (normalized === "critical") {
-    return "border-l-destructive bg-destructive/5 text-destructive";
-  }
-
-  if (normalized === "high") {
-    return "border-l-warning bg-warning/5 text-warning";
-  }
-
-  return "border-l-primary bg-primary/5 text-primary";
-}
-
-function scoreTone(score: number) {
-  if (score >= 80) return "text-success";
-  if (score >= 60) return "text-warning";
-  return "text-on-surface-variant";
-}
-
-function shortenAddress(address: string) {
-  return address.length > 10 ? `${address.slice(0, 4)}...${address.slice(-4)}` : address;
-}
-
-function formatUsd(value: string | number | null) {
-  if (value === null || value === undefined || value === "") return "Value unavailable";
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) return "Value unavailable";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(numericValue);
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.9fr_0.8fr]">
-        <div className="space-y-4">
-          <div className="h-24 animate-pulse rounded-lg border border-outline bg-surface-container" />
-          <div className="h-56 animate-pulse rounded-lg border border-outline bg-surface-container" />
-          <div className="h-40 animate-pulse rounded-lg border border-outline bg-surface-container" />
-        </div>
-        <div className="space-y-4">
-          <div className="h-80 animate-pulse rounded-lg border border-outline bg-surface-container" />
-          <div className="h-32 animate-pulse rounded-lg border border-outline bg-surface-container" />
-        </div>
-        <div className="h-[32rem] animate-pulse rounded-lg border border-outline bg-surface-container" />
-      </div>
-    </div>
-  );
+  recentWalletTrades: Array<{
+    id: string;
+    walletAddress: string;
+    tokenAddress: string;
+    tokenSymbol: string;
+    tradeType: string;
+    amount: string | number;
+    valueUsd: string | number | null;
+    tradedAt: string;
+  }>;
 }
 
 export default function DashboardPage() {
@@ -163,444 +87,424 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function fetchData() {
-      try {
-        const apiUrl = API_BASE_URL;
-        const response = await fetch(`${apiUrl}/api/v1/dashboard?signalLimit=5&alertLimit=5`, {
-          cache: "no-store",
-        });
-        const payload: { success?: boolean; data?: DashboardData; error?: string } = await response.json();
-
-        if (payload.success && payload.data) {
-          if (active) {
-            setDashboard(payload.data);
-            setError(null);
-          }
-          return;
-        }
-
-        if (active) setError(payload.error ?? "Dashboard data is unavailable.");
-      } catch {
-        if (active) setError("Unable to reach the API. The layout is live, but dashboard data is currently offline.");
-      } finally {
-        if (active) setLoading(false);
-      }
+  const fetchDashboard = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/dashboard?signalLimit=10&alertLimit=10`,
+        { cache: "no-store" },
+      );
+      const payload: { success?: boolean; data?: DashboardData; error?: string } =
+        await response.json();
+      if (!response.ok || !payload.success || !payload.data)
+        throw new Error(payload.error || "Dashboard data is unavailable");
+      setDashboard(payload.data);
+      setError(null);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : "Dashboard data is unavailable");
+    } finally {
+      setLoading(false);
     }
-
-    fetchData();
-
-    const refreshInterval = window.setInterval(fetchData, 15_000);
-    return () => {
-      active = false;
-      window.clearInterval(refreshInterval);
-    };
   }, []);
 
-  const topSignal = dashboard?.recentSignals[0] ?? null;
-  const otherSignals = dashboard?.recentSignals.slice(1, 4) ?? [];
-  const alerts = dashboard?.recentAlerts ?? [];
-  const hasData = !!dashboard;
-  const staleModules = !!dashboard && dashboard.pipeline.rawEventsFailed > 0;
+  useEffect(() => {
+    void fetchDashboard();
+    const timer = window.setInterval(() => void fetchDashboard(true), 15_000);
+    return () => window.clearInterval(timer);
+  }, [fetchDashboard]);
 
-  if (loading) {
-    return <DashboardSkeleton />;
-  }
+  if (loading && !dashboard) return <LoadingRows rows={6} />;
+  if (!dashboard)
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          eyebrow="Operator command center"
+          title="Decide what deserves attention now"
+          description="The dashboard summary is offline, but the investigation surfaces remain available for direct inspection and recovery."
+          meta={<StatusBadge tone="danger">Dashboard data offline</StatusBadge>}
+          actions={
+            <>
+              <ActionLink href="/scanner" tone="primary" icon={<Radar className="h-4 w-4" />}>
+                Open scanner
+              </ActionLink>
+              <ActionLink href="/research">Open research</ActionLink>
+              <RefreshButton onClick={() => void fetchDashboard()} busy={loading} />
+            </>
+          }
+        />
+        <ModuleNotice
+          tone="danger"
+          title="Dashboard data unavailable"
+          message={error || "No dashboard response was returned."}
+        />
+      </div>
+    );
+
+  const opportunities = [...dashboard.recentSignals].sort(
+    (left, right) => right.signalScore - left.signalScore,
+  );
+  const latestAt =
+    [
+      ...opportunities.map((item) => item.dataFreshness || item.detectedAt),
+      ...dashboard.recentAlerts.map((item) => item.triggeredAt),
+      ...dashboard.recentWalletTrades.map((item) => item.tradedAt),
+    ].sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
+  const operationalIssues =
+    dashboard.pipeline.rawEventsFailed +
+    dashboard.pipeline.deliveriesFailed +
+    dashboard.pipeline.failuresOpen;
+  const reviewWork = dashboard.pipeline.alertsPending;
 
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
-          <ShieldAlert className="mt-0.5 h-4 w-4 text-destructive" />
-          <div>
-            <p className="font-semibold text-destructive">Dashboard degraded</p>
-            <p className="text-on-surface-variant">{error}</p>
-          </div>
-        </div>
-      )}
+      <PageHeader
+        eyebrow="Operator command center"
+        title="Decide what deserves attention now"
+        description="Live market observations, strategy alerts, wallet movement, and system work are separated so one failed job never hides otherwise usable intelligence."
+        meta={
+          <>
+            <FreshnessStamp value={latestAt} label="Market" />
+            <StatusBadge tone={operationalIssues ? "warning" : "success"}>
+              {operationalIssues ? `${operationalIssues} operations issues` : "Operations nominal"}
+            </StatusBadge>
+          </>
+        }
+        actions={
+          <>
+            <ActionLink href="/scanner" icon={<Radar className="h-3.5 w-3.5" />} tone="primary">
+              Open scanner
+            </ActionLink>
+            <ActionLink href="/alerts" icon={<BellRing className="h-3.5 w-3.5" />}>
+              Review alerts
+            </ActionLink>
+          </>
+        }
+      />
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.9fr_0.8fr]">
-        <section className="space-y-4">
-          <div className="rounded-lg border border-outline bg-surface-container">
-            <div className="flex items-center justify-between border-b border-outline bg-surface-high px-standard py-3">
-              <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 text-primary" />
-                <h1 className="text-base font-semibold text-on-surface">Market and System State</h1>
-              </div>
-              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-on-surface-variant">
-                Live Surface
-              </span>
-            </div>
-            <div className="grid gap-3 p-standard sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-sm border border-outline bg-surface px-3 py-3">
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Tokens Indexed</p>
-                <p className="mt-2 font-mono text-2xl text-on-surface tabular-nums">
-                  {dashboard?.overview.tokens ?? 0}
-                </p>
-              </div>
-              <div className="rounded-sm border border-outline bg-surface px-3 py-3">
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Signals Ready</p>
-                <p className="mt-2 font-mono text-2xl text-primary tabular-nums">
-                  {dashboard?.overview.signals ?? 0}
-                </p>
-              </div>
-              <div className="rounded-sm border border-outline bg-surface px-3 py-3">
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Alerts Open</p>
-                <p className="mt-2 font-mono text-2xl text-warning tabular-nums">
-                  {dashboard?.overview.alerts ?? 0}
-                </p>
-              </div>
-              <div className="rounded-sm border border-outline bg-surface px-3 py-3">
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Wallets Tracked</p>
-                <p className="mt-2 font-mono text-2xl text-success tabular-nums">
-                  {dashboard?.overview.wallets ?? 0}
-                </p>
-              </div>
-            </div>
-          </div>
+      {error ? (
+        <ModuleNotice
+          tone="warning"
+          title="Live refresh failed"
+          message={`${error}. The last successful dashboard state remains visible.`}
+          action={<RefreshButton onClick={() => void fetchDashboard()} busy={loading} />}
+        />
+      ) : null}
 
-          <div className="rounded-lg border border-outline bg-surface-container">
-            <div className="flex items-center justify-between border-b border-outline bg-surface-high px-standard py-3">
-              <div className="flex items-center gap-2">
-                <ArrowUpRight className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-semibold text-on-surface">Ranked Candidates</h2>
-              </div>
-              <span className="rounded-sm border border-outline bg-surface px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                Unvalidated Feed
-              </span>
-            </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Observed Tokens"
+          value={dashboard.overview.tokens}
+          tone="primary"
+          detail="Current evidence window"
+        />
+        <MetricCard
+          label="Ranked Signals"
+          value={dashboard.overview.signals}
+          tone="success"
+          detail="Market observations"
+        />
+        <MetricCard
+          label="Needs Review"
+          value={reviewWork}
+          tone={reviewWork ? "warning" : "default"}
+          detail="Strategy-generated alerts"
+        />
+        <MetricCard
+          label="Active Wallets"
+          value={dashboard.overview.wallets}
+          detail="Valid wallets seen recently"
+        />
+      </div>
 
-            {!topSignal ? (
-              <div className="p-standard">
-                <div className="rounded-sm border border-outline bg-surface px-4 py-8 text-center">
-                  <p className="text-sm text-on-surface">No candidates observed yet.</p>
-                  <p className="mt-1 text-sm text-on-surface-variant">Wait for discovery or run a manual scan.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 p-standard">
-                <Link
-                  href={`/tokens/${topSignal.tokenAddress}`}
-                  className="block overflow-hidden rounded-lg border border-outline bg-surface transition-colors hover:border-primary/60"
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+        <Panel
+          title="High-Conviction Opportunities"
+          eyebrow="Ranked by score"
+          icon={<Radar className="h-4 w-4" />}
+          action={
+            <Link
+              href="/scanner"
+              className="font-mono text-[10px] uppercase tracking-[0.12em] text-primary"
+            >
+              View all
+            </Link>
+          }
+        >
+          <div className="divide-y divide-outline">
+            {opportunities.length ? (
+              opportunities.map((signal, index) => (
+                <article
+                  key={signal.id}
+                  className="grid gap-3 px-standard py-3 transition-colors hover:bg-surface-high sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center"
                 >
-                  <div className="flex items-center justify-between border-b border-outline bg-surface-high px-standard py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-outline bg-surface-bright font-mono text-lg text-on-surface">
-                        {topSignal.tokenSymbol.slice(0, 1)}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-on-surface">${topSignal.tokenSymbol}</h3>
-                        <p className="text-sm text-on-surface-variant">Primary candidate from {topSignal.dataSource}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`font-mono text-lg tabular-nums ${scoreTone(topSignal.signalScore)}`}>
-                        {topSignal.signalScore}
-                      </p>
-                      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                        {topSignal.priority}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 p-standard md:grid-cols-3">
-                    <div className="rounded-sm border border-outline bg-surface-container px-3 py-3 text-center">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Score</p>
-                      <p className={`mt-2 font-mono text-xl ${scoreTone(topSignal.signalScore)}`}>{topSignal.signalScore}</p>
-                    </div>
-                    <div className="rounded-sm border border-outline bg-surface-container px-3 py-3 text-center">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Confidence</p>
-                      <p className="mt-2 font-mono text-xl text-warning">{Math.round(topSignal.confidence * 100)}%</p>
-                    </div>
-                    <div className="rounded-sm border border-outline bg-surface-container px-3 py-3 text-center">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Freshness</p>
-                      <p className="mt-2 font-mono text-sm text-on-surface">{formatRelativeMinutes(topSignal.dataFreshness)}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 px-standard pb-standard">
-                    <p className="border-b border-outline pb-2 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                      Catalyst Evidence
-                    </p>
-                    <div className="flex items-start gap-2 text-sm text-on-surface">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-success" />
-                      Score ranks this candidate against the currently observed feed.
-                    </div>
-                    <div className="flex items-start gap-2 text-sm text-on-surface">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-success" />
-                      Source freshness last updated {formatRelativeMinutes(topSignal.dataFreshness)}.
-                    </div>
-                    <div className="flex items-start gap-2 text-sm text-on-surface-variant">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-warning" />
-                      Review full research before preparing execution.
-                    </div>
-                  </div>
-                </Link>
-
-                {otherSignals.length > 0 && (
-                  <div className="space-y-3">
-                    {otherSignals.map((signal) => (
+                  <span className="font-mono text-sm text-on-surface-variant">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Link
-                        key={signal.id}
                         href={`/tokens/${signal.tokenAddress}`}
-                        className="block rounded-lg border border-outline bg-surface px-standard py-4 transition-colors hover:border-primary/50"
+                        className="font-semibold text-on-surface hover:text-primary"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-lg font-semibold text-on-surface">${signal.tokenSymbol}</p>
-                            <p className="text-sm text-on-surface-variant">{signal.dataSource}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className={`font-mono text-lg ${scoreTone(signal.signalScore)}`}>{signal.signalScore}</p>
-                            <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                              {signal.priority}
-                            </p>
-                          </div>
-                        </div>
+                        ${signal.tokenSymbol}
                       </Link>
-                    ))}
+                      <StatusBadge tone={signal.signalScore >= 60 ? "warning" : "default"}>
+                        {signal.priority}
+                      </StatusBadge>
+                      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">
+                        {signal.dataSource}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-sm text-on-surface-variant">
+                      {signal.tokenName} · confidence {Math.round(signal.confidence * 100)}% ·{" "}
+                      {formatRelative(signal.detectedAt)}
+                    </p>
                   </div>
-                )}
-              </div>
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <div className="text-right">
+                      <p className={`font-mono text-xl ${scoreTone(signal.signalScore)}`}>
+                        {signal.signalScore}
+                      </p>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-on-surface-variant">
+                        score
+                      </p>
+                    </div>
+                    <ActionLink href={`/tokens/${signal.tokenAddress}`}>Inspect</ActionLink>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <EmptyState
+                title="No ranked opportunities yet"
+                message="The scanner has not produced a recent market observation in this evidence window."
+                action={
+                  <ActionLink href="/scanner" tone="primary">
+                    Open scanner
+                  </ActionLink>
+                }
+              />
             )}
           </div>
-        </section>
+        </Panel>
 
-        <section className="space-y-4">
-          <div className="overflow-hidden rounded-lg border border-outline bg-surface-container">
-            <div className="flex items-center justify-between border-b border-outline bg-surface-high px-standard py-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
-                <h2 className="text-base font-semibold text-on-surface">Recent Alerts</h2>
+        <Panel
+          title="Operator Queue"
+          eyebrow="Action required"
+          icon={<Waypoints className="h-4 w-4" />}
+        >
+          <div className="space-y-3 p-standard">
+            <ModuleNotice
+              tone={reviewWork ? "warning" : "success"}
+              title={reviewWork ? `${reviewWork} alerts need review` : "Alert review is clear"}
+              message={
+                reviewWork
+                  ? "Accept, reject, or hold these signals so strategy outcomes become measurable."
+                  : "No pending strategy alerts are waiting for a decision."
+              }
+              action={reviewWork ? <ActionLink href="/alerts">Triage</ActionLink> : undefined}
+            />
+            <ModuleNotice
+              tone={operationalIssues ? "warning" : "success"}
+              title={
+                operationalIssues
+                  ? `${operationalIssues} pipeline items need attention`
+                  : "Ingestion and delivery are nominal"
+              }
+              message={
+                operationalIssues
+                  ? `${dashboard.pipeline.rawEventsFailed} raw events failed, ${dashboard.pipeline.deliveriesFailed} deliveries failed, and ${dashboard.pipeline.failuresOpen} processing failures remain open.`
+                  : "No current ingestion, delivery, or processing failures are reported."
+              }
+              action={
+                operationalIssues ? <ActionLink href="/settings">Inspect</ActionLink> : undefined
+              }
+            />
+            <div className="rounded-sm border border-outline bg-surface px-3 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                <Database className="h-4 w-4 text-primary" />
+                Evidence source
               </div>
-              <span className="h-2 w-2 rounded-full bg-destructive" />
-            </div>
-
-            <div className="space-y-2 p-dense">
-              {alerts.length === 0 ? (
-                <div className="rounded-sm border border-outline bg-surface px-4 py-8 text-center">
-                  <p className="text-sm text-on-surface">No active alerts.</p>
-                  <p className="mt-1 text-sm text-on-surface-variant">The system is currently quiet.</p>
-                </div>
-              ) : (
-                alerts.map((alert) => (
-                  <Link
-                    key={alert.id}
-                    href={`/tokens/${alert.tokenAddress}`}
-                    className={[
-                      "block rounded-sm border border-outline border-l-4 px-4 py-3 transition-colors hover:border-primary/50",
-                      priorityTone(alert.priority),
-                    ].join(" ")}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-mono text-[11px] uppercase tracking-[0.12em]">{alert.priority}</p>
-                        <p className="mt-1 text-sm font-semibold text-on-surface">{alert.title}</p>
-                        <p className="mt-1 text-sm text-on-surface-variant">
-                          {alert.status} via {alert.dataSource}
-                        </p>
-                      </div>
-                      <p className="font-mono text-[11px] text-on-surface-variant">
-                        {formatRelativeMinutes(alert.triggeredAt)}
-                      </p>
-                    </div>
-                  </Link>
-                ))
-              )}
+              <p className="mt-2 text-sm text-on-surface-variant">
+                {dashboard.system.dataSourceSummary}
+              </p>
+              <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                Runtime {dashboard.system.version} · {dashboard.system.environment}
+              </p>
             </div>
           </div>
+        </Panel>
+      </div>
 
-          <div className="overflow-hidden rounded-lg border border-outline bg-surface-container">
-            <div className="flex items-center justify-between border-b border-outline bg-surface-high px-standard py-3">
-              <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-secondary" />
-                <h2 className="text-base font-semibold text-on-surface">Smart Money Flow</h2>
-              </div>
-              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                Wallet Pulse
-              </span>
-            </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Panel
+          title="Alert Triage"
+          eyebrow="Strategy matches only"
+          icon={<BellRing className="h-4 w-4" />}
+          action={
+            <Link
+              href="/alerts"
+              className="font-mono text-[10px] uppercase tracking-[0.12em] text-primary"
+            >
+              Open feed
+            </Link>
+          }
+        >
+          <div className="divide-y divide-outline">
+            {dashboard.recentAlerts.length ? (
+              dashboard.recentAlerts.slice(0, 6).map((alert) => (
+                <Link
+                  key={alert.id}
+                  href={`/alerts?selected=${alert.id}`}
+                  className="block border-l-2 border-l-transparent px-standard py-3 transition-colors hover:border-l-primary hover:bg-surface-high"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusBadge
+                          tone={
+                            alert.priority === "critical"
+                              ? "danger"
+                              : alert.priority === "high"
+                                ? "warning"
+                                : "primary"
+                          }
+                        >
+                          {alert.priority}
+                        </StatusBadge>
+                        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-on-surface-variant">
+                          {alert.status}
+                        </span>
+                      </div>
+                      <p className="mt-2 truncate font-semibold text-on-surface">{alert.title}</p>
+                      <p className="mt-1 line-clamp-2 text-sm text-on-surface-variant">
+                        {alert.message || `Strategy ${alert.strategyName || "match"}`}
+                      </p>
+                    </div>
+                    <span className={`font-mono text-lg ${scoreTone(alert.signalScore)}`}>
+                      {alert.signalScore}
+                    </span>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <EmptyState
+                title="No strategy alerts"
+                message="Market observations are available in Scanner; alerts appear only when an active strategy matches."
+              />
+            )}
+          </div>
+        </Panel>
 
-            <div className="overflow-hidden">
-              <table className="w-full border-collapse">
-                <thead className="border-b border-outline bg-surface text-left">
-                  <tr className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
-                    <th className="px-3 py-2 font-medium">Wallet</th>
-                    <th className="px-3 py-2 font-medium">Action</th>
-                    <th className="px-3 py-2 text-right font-medium">Size</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline text-sm">
-                  {(dashboard?.recentWalletTrades ?? []).map((trade) => {
-                    const isSell = trade.tradeType.toLowerCase() === "sell";
-                    return (
-                      <tr key={trade.id} className="bg-surface transition-colors hover:bg-surface-high">
-                        <td className="px-3 py-3 font-mono text-primary">{shortenAddress(trade.walletAddress)}</td>
-                        <td className={["px-3 py-3 font-mono", isSell ? "text-destructive" : "text-success"].join(" ")}>
-                          {trade.tradeType} ${trade.tokenSymbol}
-                        </td>
-                        <td className="px-3 py-3 text-right font-mono text-on-surface tabular-nums">
-                          {formatUsd(trade.valueUsd)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!dashboard?.recentWalletTrades?.length && (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-8 text-center text-sm text-on-surface-variant">
-                        No verified wallet movement in the selected data window.
+        <Panel
+          title="Verified Wallet Movement"
+          eyebrow="Recent tracked trades"
+          icon={<Wallet className="h-4 w-4" />}
+          action={
+            <Link
+              href="/wallets"
+              className="font-mono text-[10px] uppercase tracking-[0.12em] text-primary"
+            >
+              Wallet intelligence
+            </Link>
+          }
+        >
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="border-b border-outline bg-surface-high font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                <tr>
+                  <th className="px-standard py-3">Wallet</th>
+                  <th className="px-3 py-3">Action</th>
+                  <th className="px-3 py-3">Token</th>
+                  <th className="px-standard py-3 text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline">
+                {dashboard.recentWalletTrades.length ? (
+                  dashboard.recentWalletTrades.map((trade) => (
+                    <tr key={trade.id} className="transition-colors hover:bg-surface-high">
+                      <td className="px-standard py-3">
+                        <Link
+                          href={`/wallets?address=${trade.walletAddress}`}
+                          className="font-mono text-primary hover:underline"
+                        >
+                          {shortAddress(trade.walletAddress)}
+                        </Link>
+                        <p className="mt-1 text-xs text-on-surface-variant">
+                          {formatRelative(trade.tradedAt)}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <StatusBadge
+                          tone={
+                            trade.tradeType.toLowerCase().includes("buy") ? "success" : "warning"
+                          }
+                        >
+                          {trade.tradeType}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-3 py-3">
+                        <Link
+                          href={`/tokens/${trade.tokenAddress}`}
+                          className="font-semibold text-on-surface hover:text-primary"
+                        >
+                          ${trade.tokenSymbol}
+                        </Link>
+                      </td>
+                      <td className="px-standard py-3 text-right font-mono text-on-surface">
+                        {formatUsd(trade.valueUsd === null ? null : Number(trade.valueUsd))}
                       </td>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4}>
+                      <EmptyState
+                        title="No recent wallet movement"
+                        message="Wallet trades will appear when tracked wallets are synchronized and valid activity is found."
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </section>
-
-        <aside className="overflow-hidden rounded-lg border border-outline bg-surface-container shadow-panel-strong">
-          <div className="flex items-center justify-between border-b border-outline bg-surface-high px-standard py-3">
-            <div className="flex items-center gap-2">
-              <BellRing className="h-4 w-4 text-primary" />
-              <h2 className="text-base font-semibold text-on-surface">
-                Quick Inspect{topSignal ? `: $${topSignal.tokenSymbol}` : ""}
-              </h2>
-            </div>
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Context</span>
-          </div>
-
-          <div className="space-y-6 p-standard">
-            <div className="relative h-40 overflow-hidden rounded-sm border border-outline bg-surface">
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(67,70,85,0.25)_1px,transparent_1px),linear-gradient(to_bottom,rgba(67,70,85,0.25)_1px,transparent_1px)] bg-[size:20px_20px]" />
-              <svg className="absolute inset-0 h-full w-full text-success" viewBox="0 0 100 50" preserveAspectRatio="none">
-                <path
-                  d="M0 42 L10 36 L20 38 L30 28 L40 31 L50 18 L60 22 L70 10 L80 7 L90 10 L100 3"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-                <path
-                  d="M0 42 L10 36 L20 38 L30 28 L40 31 L50 18 L60 22 L70 10 L80 7 L90 10 L100 3 L100 50 L0 50 Z"
-                  fill="currentColor"
-                  opacity="0.12"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="rounded-sm border border-outline bg-surface/80 px-2 py-1 font-mono text-[11px] text-on-surface-variant">
-                  Live Chart Data
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Key Metrics</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-sm border border-outline bg-surface px-3 py-3">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Signals</p>
-                  <p className="mt-2 font-mono text-lg text-on-surface tabular-nums">{dashboard?.overview.signals ?? 0}</p>
-                </div>
-                <div className="rounded-sm border border-outline bg-surface px-3 py-3">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Alerts</p>
-                  <p className="mt-2 font-mono text-lg text-warning tabular-nums">{dashboard?.overview.alerts ?? 0}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Security Check</p>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-sm border border-outline bg-surface px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2 text-on-surface">
-                    <span className="h-2 w-2 rounded-full bg-success" />
-                    Delivery health
-                  </span>
-                  <span className="font-mono text-success">
-                    {dashboard?.pipeline.deliveriesFailed ? "Watch" : "Pass"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-sm border border-outline bg-surface px-3 py-2 text-sm">
-                  <span className="flex items-center gap-2 text-on-surface">
-                    <span className="h-2 w-2 rounded-full bg-warning" />
-                    Failures open
-                  </span>
-                  <span className="font-mono text-warning tabular-nums">{dashboard?.pipeline.failuresOpen ?? 0}</span>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={[
-                "rounded-lg border px-4 py-4",
-                staleModules
-                  ? "border-stale/40 bg-stale/10"
-                  : "border-outline bg-surface",
-              ].join(" ")}
-            >
-              <div className="flex items-start gap-3">
-                <Clock3 className={["mt-0.5 h-4 w-4", staleModules ? "text-stale" : "text-success"].join(" ")} />
-                <div>
-                  <p className={["font-semibold", staleModules ? "text-stale" : "text-on-surface"].join(" ")}>
-                    {staleModules ? "Stale pipeline pressure detected" : "System freshness nominal"}
-                  </p>
-                  <p className="mt-1 text-sm text-on-surface-variant">
-                    {staleModules
-                      ? `${dashboard?.pipeline.rawEventsFailed ?? 0} raw event jobs have failed. Cached metrics remain visible while workers recover.`
-                      : `Environment ${dashboard?.system.environment ?? "development"} is serving ${
-                          dashboard?.system.dataSourceSummary ?? "the current data source"
-                        }.`}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-outline bg-surface-high px-4 py-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">Quick Actions</p>
-              <div className="mt-3 space-y-2">
-                <Link
-                  href={topSignal ? `/tokens/${topSignal.tokenAddress}` : "/scanner"}
-                  className="flex items-center justify-between rounded-sm border border-primary-container/30 bg-primary-container/10 px-3 py-3 text-sm text-primary transition-colors hover:bg-primary-container/20"
-                >
-                  <span>{topSignal ? `Open ${topSignal.tokenSymbol} Research` : "Open Scanner"}</span>
-                  <MoveRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="/terminal"
-                  className="flex items-center justify-between rounded-sm border border-outline bg-surface px-3 py-3 text-sm text-on-surface transition-colors hover:border-primary/40"
-                >
-                  <span>Prepare Trade Setup</span>
-                  <MoveRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-
-            {hasData && (
-              <div className="rounded-lg border border-outline bg-surface px-4 py-4 text-sm">
-                <p className="font-semibold text-on-surface">System Context</p>
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-on-surface-variant">Version</span>
-                    <span className="font-mono text-on-surface">{dashboard?.system.version ?? "0.1.0"}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-on-surface-variant">Last alert</span>
-                    <span className="font-mono text-on-surface">
-                      {alerts[0] ? formatShortTime(alerts[0].triggeredAt) : "None"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-on-surface-variant">Delivered</span>
-                    <span className="font-mono text-success tabular-nums">
-                      {dashboard?.pipeline.alertsDelivered ?? 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>
+        </Panel>
       </div>
+
+      <Panel
+        title="System Evidence"
+        eyebrow="Module-level health"
+        icon={
+          operationalIssues ? (
+            <AlertTriangle className="h-4 w-4" />
+          ) : (
+            <ShieldCheck className="h-4 w-4" />
+          )
+        }
+      >
+        <div className="grid gap-3 p-standard sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard
+            label="Raw Pending"
+            value={dashboard.pipeline.rawEventsPending}
+            tone={dashboard.pipeline.rawEventsPending ? "warning" : "default"}
+          />
+          <MetricCard
+            label="Alerts Delivered"
+            value={dashboard.pipeline.alertsDelivered}
+            tone="success"
+          />
+          <MetricCard
+            label="Deliveries Failed"
+            value={dashboard.pipeline.deliveriesFailed}
+            tone={dashboard.pipeline.deliveriesFailed ? "danger" : "default"}
+          />
+          <MetricCard
+            label="Failures Open"
+            value={dashboard.pipeline.failuresOpen}
+            tone={dashboard.pipeline.failuresOpen ? "warning" : "default"}
+          />
+        </div>
+      </Panel>
     </div>
   );
 }

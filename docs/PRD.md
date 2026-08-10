@@ -148,20 +148,21 @@ User creates or edits strategy
 - Basic web UI
 - Telegram bot foundation
 
-### Phase 2: Live Data (Completed)
+### Phase 2: Live Intelligence and Edge Proof (In Progress)
 - Real Solana RPC integration
 - Token discovery pipeline
 - Wallet qualification system
 - Full scoring engine
+- Broad-market observations separated from strategy alerts
+- Explainable token research, alert review, wallet analysis, watchlists, and evidence-gated strategy backtesting
+- Alert outcome measurement and manual review workflow
+- Remaining: measure launch-source coverage, expand wallet evidence, detect funding relationships and wallet clusters, accumulate a representative historical dataset, and prove strategy edge
 
-### Phase 3: Trading (Next)
+### Phase 3: Trading (Final, Evidence-Gated)
 - Jupiter integration
 - Non-custodial wallet connection
 - Simulated trading
+- Transaction risk confirmation and explicit signing
 - Trade outcome tracking
 
-### Phase 4: Advanced Intelligence
-- Wallet clustering
-- Historical backtesting
-- Strategy builder
-- Graph explorer
+Phase 3 must not begin until the Phase 2 evidence gate passes. There is no post-trading intelligence phase; wallet clustering, historical proof, strategy validation, and graph evidence belong before trading.
