@@ -10,7 +10,12 @@ import {
   type RuntimeStrategyRecord,
 } from "@memecoin/intelligence";
 import { generateDeepLinks } from "@memecoin/notifications";
-import type { IProviderRegistry, MarketData, TokenInfo } from "@memecoin/solana";
+import {
+  fetchDexScreenerTokenData,
+  type IProviderRegistry,
+  type MarketData,
+  type TokenInfo,
+} from "@memecoin/solana";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { logger as createLogger } from "@memecoin/logger";
 import type { getDb } from "@memecoin/database";
@@ -393,16 +398,6 @@ interface DexScreenerTokenBoost {
   links?: Array<{ type?: string; label?: string; url?: string }>;
 }
 
-interface DexScreenerPairResponse {
-  pairs?: Array<{
-    pairAddress?: string;
-    dexId?: string;
-    pairCreatedAt?: number;
-    baseToken?: { address?: string; name?: string; symbol?: string };
-    quoteToken?: { address?: string; name?: string; symbol?: string };
-  }>;
-}
-
 interface DiscoveryCandidate {
   source: string;
   tokenAddress: string;
@@ -415,6 +410,36 @@ interface DexPairMetadata extends TokenMetadata {
   pairAddress?: string;
   dexId?: string;
   pairCreatedAt?: Date;
+}
+
+interface DexScreenerListCacheEntry {
+  data: unknown[];
+  expiresAt: number;
+  staleUntil: number;
+}
+
+const dexScreenerListCache = new Map<string, DexScreenerListCacheEntry>();
+const dexScreenerListRequests = new Map<string, Promise<unknown[]>>();
+const dexScreenerListBackoff = new Map<string, number>();
+
+export function resetDexScreenerDiscoveryCache() {
+  dexScreenerListCache.clear();
+  dexScreenerListRequests.clear();
+  dexScreenerListBackoff.clear();
+}
+
+function readDexScreenerDuration(name: string, fallback: number) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : fallback;
+}
+
+function readDexScreenerRetryAfter(response: Response) {
+  const retryAfter = response.headers?.get("retry-after");
+  if (!retryAfter) return 60_000;
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds)) return Math.max(seconds * 1_000, 1_000);
+  const retryAt = Date.parse(retryAfter);
+  return Number.isNaN(retryAt) ? 60_000 : Math.max(retryAt - Date.now(), 1_000);
 }
 
 interface HolderEvidence {
@@ -634,19 +659,47 @@ async function discoverDexScreenerBoostTokens(
 }
 
 async function fetchDexScreenerList<T>(url: string, warning: string): Promise<T[]> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      log.warn({ status: response.status, url }, warning);
-      return [];
-    }
-
-    const data = await response.json();
-    return Array.isArray(data) ? data as T[] : [];
-  } catch (err) {
-    log.warn({ error: err, url }, warning);
-    return [];
+  const now = Date.now();
+  const cached = dexScreenerListCache.get(url);
+  if (cached && now < cached.expiresAt) return cached.data as T[];
+  if ((dexScreenerListBackoff.get(url) ?? 0) > now) {
+    return cached && now < cached.staleUntil ? cached.data as T[] : [];
   }
+
+  const pending = dexScreenerListRequests.get(url);
+  if (pending) return pending as Promise<T[]>;
+
+  const request = (async () => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        const retryMs = response.status === 429 ? readDexScreenerRetryAfter(response) : 30_000;
+        dexScreenerListBackoff.set(url, Date.now() + retryMs);
+        log.warn({ status: response.status, url, retryMs }, warning);
+        return cached && Date.now() < cached.staleUntil ? cached.data : [];
+      }
+
+      const data = await response.json();
+      const list = Array.isArray(data) ? data : [];
+      const cachedAt = Date.now();
+      dexScreenerListCache.set(url, {
+        data: list,
+        expiresAt: cachedAt + readDexScreenerDuration("DEXSCREENER_DISCOVERY_CACHE_MS", 60_000),
+        staleUntil: cachedAt + readDexScreenerDuration("DEXSCREENER_DISCOVERY_STALE_MS", 5 * 60_000),
+      });
+      dexScreenerListBackoff.delete(url);
+      return list;
+    } catch (err) {
+      dexScreenerListBackoff.set(url, Date.now() + 30_000);
+      log.warn({ error: err, url }, warning);
+      return cached && Date.now() < cached.staleUntil ? cached.data : [];
+    } finally {
+      dexScreenerListRequests.delete(url);
+    }
+  })();
+
+  dexScreenerListRequests.set(url, request);
+  return request as Promise<T[]>;
 }
 
 async function buildDexScreenerEvents(
@@ -690,10 +743,8 @@ async function buildDexScreenerEvents(
 
 async function getDexScreenerPairMetadata(tokenAddress: string): Promise<DexPairMetadata | null> {
   try {
-    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as DexScreenerPairResponse;
+    const data = await fetchDexScreenerTokenData(tokenAddress);
+    if (!data) return null;
     const pair = data.pairs?.find((candidate) => candidate.baseToken?.address === tokenAddress) ?? data.pairs?.[0];
     const symbol = readDexString(pair?.baseToken?.symbol);
     const name = readDexString(pair?.baseToken?.name);

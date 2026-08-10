@@ -12,8 +12,8 @@ const log = logger("dexscreener-provider");
 
 const DEXSCREENER_API = "https://api.dexscreener.com/latest";
 
-interface DexScreenerResponse {
-  pairs: Array<{
+export interface DexScreenerResponse {
+  pairs?: Array<{
     pairAddress: string;
     baseToken: { address: string; name: string; symbol: string };
     quoteToken: { address: string; name: string; symbol: string };
@@ -23,7 +23,77 @@ interface DexScreenerResponse {
     volume?: { h1?: number; h24?: number };
     priceChange?: { h1?: number; h24?: number };
     dexId?: string;
+    pairCreatedAt?: number;
   }>;
+}
+
+interface DexScreenerCacheEntry {
+  data: DexScreenerResponse;
+  expiresAt: number;
+  staleUntil: number;
+}
+
+const tokenResponseCache = new Map<string, DexScreenerCacheEntry>();
+const tokenResponseRequests = new Map<string, Promise<DexScreenerResponse | null>>();
+const tokenResponseBackoff = new Map<string, number>();
+
+function readDuration(name: string, fallback: number) {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : fallback;
+}
+
+function readRetryAfter(response: Response) {
+  const retryAfter = response.headers?.get("retry-after");
+  if (!retryAfter) return 60_000;
+
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds)) return Math.max(seconds * 1_000, 1_000);
+
+  const retryAt = Date.parse(retryAfter);
+  return Number.isNaN(retryAt) ? 60_000 : Math.max(retryAt - Date.now(), 1_000);
+}
+
+export async function fetchDexScreenerTokenData(address: string): Promise<DexScreenerResponse | null> {
+  const now = Date.now();
+  const cached = tokenResponseCache.get(address);
+  if (cached && now < cached.expiresAt) return cached.data;
+  if ((tokenResponseBackoff.get(address) ?? 0) > now) {
+    return cached && now < cached.staleUntil ? cached.data : null;
+  }
+
+  const pending = tokenResponseRequests.get(address);
+  if (pending) return pending;
+
+  const request = (async () => {
+    try {
+      const response = await fetch(`${DEXSCREENER_API}/dex/tokens/${address}`);
+      if (!response.ok) {
+        const retryMs = response.status === 429 ? readRetryAfter(response) : 30_000;
+        tokenResponseBackoff.set(address, Date.now() + retryMs);
+        log.warn({ address, status: response.status, retryMs }, "DexScreener token request failed");
+        return cached && Date.now() < cached.staleUntil ? cached.data : null;
+      }
+
+      const data = (await response.json()) as DexScreenerResponse;
+      const cachedAt = Date.now();
+      tokenResponseCache.set(address, {
+        data,
+        expiresAt: cachedAt + readDuration("DEXSCREENER_TOKEN_CACHE_MS", 15_000),
+        staleUntil: cachedAt + readDuration("DEXSCREENER_TOKEN_STALE_MS", 5 * 60_000),
+      });
+      tokenResponseBackoff.delete(address);
+      return data;
+    } catch (err) {
+      tokenResponseBackoff.set(address, Date.now() + 30_000);
+      log.warn({ address, error: err }, "DexScreener token request failed");
+      return cached && Date.now() < cached.staleUntil ? cached.data : null;
+    } finally {
+      tokenResponseRequests.delete(address);
+    }
+  })();
+
+  tokenResponseRequests.set(address, request);
+  return request;
 }
 
 export class DexScreenerProvider implements IMarketDataProvider {
@@ -31,10 +101,8 @@ export class DexScreenerProvider implements IMarketDataProvider {
 
   async getTokenPrice(address: string): Promise<PriceData | null> {
     try {
-      const response = await fetch(`${DEXSCREENER_API}/dex/tokens/${address}`);
-      if (!response.ok) return null;
-
-      const data = (await response.json()) as DexScreenerResponse;
+      const data = await fetchDexScreenerTokenData(address);
+      if (!data) return null;
       const pair = data.pairs?.[0];
       if (!pair?.priceUsd) return null;
 
@@ -51,10 +119,8 @@ export class DexScreenerProvider implements IMarketDataProvider {
 
   async getMarketData(address: string): Promise<MarketData | null> {
     try {
-      const response = await fetch(`${DEXSCREENER_API}/dex/tokens/${address}`);
-      if (!response.ok) return null;
-
-      const data = (await response.json()) as DexScreenerResponse;
+      const data = await fetchDexScreenerTokenData(address);
+      if (!data) return null;
       const pair = data.pairs?.[0];
       if (!pair) return null;
 
@@ -87,10 +153,8 @@ export class DexScreenerProvider implements IMarketDataProvider {
 
   async getPoolsForToken(address: string): Promise<PoolData[]> {
     try {
-      const response = await fetch(`${DEXSCREENER_API}/dex/tokens/${address}`);
-      if (!response.ok) return [];
-
-      const data = (await response.json()) as DexScreenerResponse;
+      const data = await fetchDexScreenerTokenData(address);
+      if (!data) return [];
       return (data.pairs || []).map((pair) => ({
         address: pair.pairAddress,
         baseMint: pair.baseToken.address,

@@ -1,6 +1,10 @@
 import type { DiscoverTokensOptions } from "../index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { discoverTokens, type TokenDiscoveryRepository } from "./discover-tokens.js";
+import {
+  discoverTokens,
+  resetDexScreenerDiscoveryCache,
+  type TokenDiscoveryRepository,
+} from "./discover-tokens.js";
 
 function createRepository(): TokenDiscoveryRepository {
   return {
@@ -22,6 +26,7 @@ function createRepository(): TokenDiscoveryRepository {
 describe("discoverTokens", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetDexScreenerDiscoveryCache();
   });
 
   it("persists provider metadata from discovery and market data services", async () => {
