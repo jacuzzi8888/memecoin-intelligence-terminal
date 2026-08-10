@@ -1,5 +1,6 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { logger } from "@memecoin/logger";
+import { fetchHelius } from "./helius-rate-limit.js";
 
 const log = logger("wallet-history-service");
 
@@ -48,7 +49,7 @@ export class WalletHistoryService {
     try {
       const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${this.heliusApiKey}&limit=${limit}&type=SWAP`;
 
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await fetchHelius(url, { signal: controller.signal });
       if (!response.ok) {
         log.error({ status: response.status }, "Failed to fetch wallet transactions");
         return [];

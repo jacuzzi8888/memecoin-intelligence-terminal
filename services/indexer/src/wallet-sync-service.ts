@@ -103,6 +103,11 @@ export async function scheduleTrackedWalletSync(options?: {
 }
 
 export async function runWalletSyncService() {
+  const configuredConcurrency = Number(process.env.WALLET_SYNC_CONCURRENCY ?? 1);
+  const concurrency = Number.isFinite(configuredConcurrency)
+    ? Math.max(1, Math.min(5, Math.floor(configuredConcurrency)))
+    : 1;
+
   const worker = createWorker<WalletSyncJobData>(WALLET_SYNC_QUEUE, async (job) => {
     const bullJobId = job.id ? String(job.id) : null;
     const db = getDb();
@@ -129,6 +134,7 @@ export async function runWalletSyncService() {
       throw error;
     }
   }, {
+    concurrency,
     onTerminalFailure: async (job, error) => {
       const bullJobId = job.id ? String(job.id) : null;
       if (!bullJobId) return;
@@ -137,7 +143,7 @@ export async function runWalletSyncService() {
   });
 
   await worker.waitUntilReady();
-  log.info({ queue: WALLET_SYNC_QUEUE }, "Wallet sync worker started");
+  log.info({ queue: WALLET_SYNC_QUEUE, concurrency }, "Wallet sync worker started");
   return worker;
 }
 

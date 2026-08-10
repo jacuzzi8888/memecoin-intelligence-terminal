@@ -4,6 +4,7 @@ import { getDb } from "@memecoin/database";
 import * as schema from "@memecoin/database/schema";
 import { logger } from "@memecoin/logger";
 import { isValidSolanaWalletAddress, runWalletIntelligencePipeline, type WalletPipelineResult } from "./wallet-pipeline.js";
+import { fetchHelius } from "./helius-rate-limit.js";
 
 const log = logger("token-wallet-discovery");
 const DISCOVERY_VERSION = "token-wallet-discovery-v0.1.0";
@@ -95,7 +96,7 @@ async function fetchTokenTransactions(
       limit: String(limit),
       type: "SWAP",
     });
-    const response = await fetch(`https://api.helius.xyz/v0/addresses/${tokenAddress}/transactions?${params}`, {
+    const response = await fetchHelius(`https://api.helius.xyz/v0/addresses/${tokenAddress}/transactions?${params}`, {
       signal: controller.signal,
     });
     if (!response.ok) {
