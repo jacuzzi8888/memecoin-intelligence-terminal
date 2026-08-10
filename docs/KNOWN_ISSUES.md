@@ -13,6 +13,7 @@ The scoring, backtest, outcome, review, and evidence-gate mechanisms are impleme
 ### KI-004: Wallet evidence is still sparse
 **Severity**: Medium
 Wallet discovery and qualification work, but only a subset of observed candidates has qualified-wallet evidence. This limits confidence and correctly produces `unknown` risk on many tokens.
+Wallet Intelligence can now filter and rank all persisted wallets by score, PnL, legitimacy, win rate, and recency; the remaining limitation is evidence coverage, not surface functionality.
 
 ### KI-005: External notifications require credentials
 **Severity**: Medium
@@ -51,6 +52,7 @@ The production wallet queue contains failed jobs from provider-limited sync atte
 - Duplicate signal emission now requires material change and cooldown expiry.
 - Risk no longer treats missing evidence as low risk.
 - Scanner text, timeframe, liquidity, volume, market-cap, pair-age, wallet, source, and bundler filters are functional.
+- Wallet Intelligence score, PnL, legitimacy, and ranking filters are functional and server-backed.
 - Generic browser selects were replaced by the Aegis custom select component.
 - The Research route is functional.
 - Static TPS, gas, latency, fake risk labels, and synthetic charts were removed.

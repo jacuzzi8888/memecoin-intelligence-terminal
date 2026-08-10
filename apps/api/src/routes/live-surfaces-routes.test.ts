@@ -4,6 +4,7 @@ import * as schema from "@memecoin/database/schema";
 
 const getDb = vi.fn();
 const VALID_WALLET_ADDRESS = "GcETuWju2zbxZcEBf1iVH4XWpwfDjm2YUq6bFQnQwXVE";
+const FLAGGED_WALLET_ADDRESS = "F4BFjm8zfVni6GKsEn5ryu2mTesFugctZUn8b2ZxGuud";
 const enqueueWalletSyncJob = vi.fn().mockResolvedValue({
   queue: "wallet-sync",
   jobId: "wallet-job-1",
@@ -157,6 +158,16 @@ const fixtures: Fixtures = {
     totalTrades: 12,
     firstSeenAt: new Date("2026-07-25T10:00:00.000Z"),
     lastSeenAt: new Date("2026-07-26T10:00:00.000Z"),
+    metadata: { qualification: { isQualified: true, walletScore: 77 } },
+  }, {
+    id: "wallet-2",
+    address: FLAGGED_WALLET_ADDRESS,
+    label: "Automated Risk",
+    classification: "bot",
+    totalTrades: 140,
+    firstSeenAt: new Date("2026-07-24T10:00:00.000Z"),
+    lastSeenAt: new Date("2026-07-25T10:00:00.000Z"),
+    metadata: { qualification: { isQualified: false, walletScore: 25 } },
   }],
   walletLabels: [{
     id: "label-1",
@@ -180,6 +191,18 @@ const fixtures: Fixtures = {
     profitableTrades: 8,
     score: 77,
     calculatedAt: new Date("2026-07-26T10:05:00.000Z"),
+  }, {
+    id: "performance-2",
+    walletId: "wallet-2",
+    walletAddress: FLAGGED_WALLET_ADDRESS,
+    rulesetVersion: "wallet-classifier-v0.1.0",
+    totalPnlUsd: "-500",
+    realizedPnlUsd: "-500",
+    winRate: "0.2",
+    totalTrades: 140,
+    profitableTrades: 28,
+    score: 25,
+    calculatedAt: new Date("2026-07-25T10:05:00.000Z"),
   }],
   walletPositions: [{
     id: "position-1",
@@ -298,6 +321,38 @@ describe("API live surfaces routes", () => {
     });
     expect(payload.data[0].latestSyncJob).toMatchObject({
       status: "completed",
+    });
+    expect(payload.pagination).toMatchObject({ total: 2, scanned: 2 });
+  });
+
+  it("filters wallet intelligence by score, PnL, and legitimacy", async () => {
+    const trustedResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/wallets?scoreBand=strong&pnlBand=profitable&legitimacy=trusted",
+    });
+    const trustedPayload = trustedResponse.json();
+
+    expect(trustedResponse.statusCode).toBe(200);
+    expect(trustedPayload.data).toHaveLength(1);
+    expect(trustedPayload.data[0]).toMatchObject({
+      address: VALID_WALLET_ADDRESS,
+      classification: "early_buyer",
+      performance: { score: 77, totalPnlUsd: 1500 },
+    });
+    expect(trustedPayload.pagination).toMatchObject({ total: 1, scanned: 2 });
+
+    const flaggedResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/wallets?scoreBand=weak&pnlBand=losing&legitimacy=flagged",
+    });
+    const flaggedPayload = flaggedResponse.json();
+
+    expect(flaggedResponse.statusCode).toBe(200);
+    expect(flaggedPayload.data).toHaveLength(1);
+    expect(flaggedPayload.data[0]).toMatchObject({
+      address: FLAGGED_WALLET_ADDRESS,
+      classification: "bot",
+      performance: { score: 25, totalPnlUsd: -500 },
     });
   });
 

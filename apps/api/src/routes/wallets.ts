@@ -12,6 +12,10 @@ import { isValidSolanaWalletAddress } from "./solana-address.js";
 const querySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
   includeInvalid: z.coerce.boolean().default(false),
+  scoreBand: z.enum(["all", "elite", "strong", "watch", "weak", "unscored"]).default("all"),
+  pnlBand: z.enum(["all", "profitable", "pnl_1k", "pnl_10k", "losing", "breakeven", "unknown"]).default("all"),
+  legitimacy: z.enum(["all", "trusted", "qualified", "flagged", "unknown"]).default("all"),
+  sortBy: z.enum(["score_desc", "pnl_desc", "win_rate_desc", "recent"]).default("score_desc"),
 });
 
 const createWalletSchema = z.object({
@@ -25,14 +29,23 @@ function asRecord(value: unknown) {
     : {};
 }
 
+const trustedClassifications = new Set(["legitimate_trader", "early_buyer", "whale", "diamond_hands"]);
+const flaggedClassifications = new Set(["bot", "insider", "bundler"]);
+
+function compareNullableDescending(left: number | null, right: number | null) {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return right - left;
+}
+
 export const walletsRoute: FastifyPluginAsync = async (app) => {
   app.get("/wallets", async (request) => {
     const query = querySchema.parse(request.query);
     const db = getDb();
-    const walletRows = await db.select().from(schema.wallets).orderBy(desc(schema.wallets.updatedAt)).limit(query.limit * 4);
+    const walletRows = await db.select().from(schema.wallets).orderBy(desc(schema.wallets.updatedAt)).limit(2_000);
     const wallets = walletRows
-      .filter((wallet) => query.includeInvalid || isValidSolanaWalletAddress(wallet.address))
-      .slice(0, query.limit);
+      .filter((wallet) => query.includeInvalid || isValidSolanaWalletAddress(wallet.address));
 
     const walletIds = wallets.map((wallet) => wallet.id);
     const walletAddresses = wallets.map((wallet) => wallet.address);
@@ -80,9 +93,7 @@ export const walletsRoute: FastifyPluginAsync = async (app) => {
       }
     }
 
-    return {
-      success: true,
-      data: wallets.map((wallet) => {
+    const enrichedWallets = wallets.map((wallet) => {
         const latestLabel = latestLabelByWallet.get(wallet.id);
         const latestPerformance = latestPerformanceByWallet.get(wallet.id);
         const openPositions = (positionsByWalletAddress.get(wallet.address) ?? []).filter((position) => position.status === "open");
@@ -148,8 +159,71 @@ export const walletsRoute: FastifyPluginAsync = async (app) => {
             unrealizedPnlUsd: position.unrealizedPnlUsd ? Number(position.unrealizedPnlUsd) : null,
             openedAt: position.openedAt.toISOString(),
           })),
-        };
-      }),
+      };
+    });
+
+    const filteredWallets = enrichedWallets.filter((wallet) => {
+      const score = wallet.performance?.score ?? wallet.qualification?.walletScore ?? null;
+      const pnl = wallet.performance?.totalPnlUsd ?? null;
+      const qualified = wallet.qualification?.isQualified === true;
+      const trusted = qualified || trustedClassifications.has(wallet.classification);
+      const flagged = flaggedClassifications.has(wallet.classification);
+
+      const scoreMatches = query.scoreBand === "all"
+        || (query.scoreBand === "elite" && score !== null && score >= 80)
+        || (query.scoreBand === "strong" && score !== null && score >= 60 && score < 80)
+        || (query.scoreBand === "watch" && score !== null && score >= 40 && score < 60)
+        || (query.scoreBand === "weak" && score !== null && score < 40)
+        || (query.scoreBand === "unscored" && score === null);
+      const pnlMatches = query.pnlBand === "all"
+        || (query.pnlBand === "profitable" && pnl !== null && pnl > 0)
+        || (query.pnlBand === "pnl_1k" && pnl !== null && pnl >= 1_000)
+        || (query.pnlBand === "pnl_10k" && pnl !== null && pnl >= 10_000)
+        || (query.pnlBand === "losing" && pnl !== null && pnl < 0)
+        || (query.pnlBand === "breakeven" && pnl === 0)
+        || (query.pnlBand === "unknown" && pnl === null);
+      const legitimacyMatches = query.legitimacy === "all"
+        || (query.legitimacy === "trusted" && trusted)
+        || (query.legitimacy === "qualified" && qualified)
+        || (query.legitimacy === "flagged" && flagged)
+        || (query.legitimacy === "unknown" && wallet.classification === "unknown");
+
+      return scoreMatches && pnlMatches && legitimacyMatches;
+    });
+
+    filteredWallets.sort((left, right) => {
+      if (query.sortBy === "pnl_desc") {
+        return compareNullableDescending(left.performance?.totalPnlUsd ?? null, right.performance?.totalPnlUsd ?? null);
+      }
+      if (query.sortBy === "win_rate_desc") {
+        return compareNullableDescending(left.performance?.winRate ?? null, right.performance?.winRate ?? null);
+      }
+      if (query.sortBy === "recent") {
+        return compareNullableDescending(
+          left.lastSeenAt ? new Date(left.lastSeenAt).getTime() : null,
+          right.lastSeenAt ? new Date(right.lastSeenAt).getTime() : null,
+        );
+      }
+      return compareNullableDescending(
+        left.performance?.score ?? left.qualification?.walletScore ?? null,
+        right.performance?.score ?? right.qualification?.walletScore ?? null,
+      );
+    });
+
+    return {
+      success: true,
+      data: filteredWallets.slice(0, query.limit),
+      filters: {
+        scoreBand: query.scoreBand,
+        pnlBand: query.pnlBand,
+        legitimacy: query.legitimacy,
+        sortBy: query.sortBy,
+      },
+      pagination: {
+        total: filteredWallets.length,
+        scanned: enrichedWallets.length,
+        limit: query.limit,
+      },
       requestId: request.id,
       timestamp: new Date().toISOString(),
     };

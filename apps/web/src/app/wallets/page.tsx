@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, BadgeCheck, Plus, RefreshCw, ShieldAlert, Users, Wallet } from "lucide-react";
+import { Activity, BadgeCheck, Plus, RefreshCw, RotateCcw, ShieldAlert, SlidersHorizontal, Users, Wallet } from "lucide-react";
 import {
+  AegisSelect,
   ErrorState,
   LoadingRows,
   MetricCard,
@@ -76,6 +77,12 @@ export default function WalletsPage() {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [address, setAddress] = useState("");
   const [label, setLabel] = useState("");
+  const [scoreBand, setScoreBand] = useState("all");
+  const [pnlBand, setPnlBand] = useState("all");
+  const [legitimacy, setLegitimacy] = useState("all");
+  const [sortBy, setSortBy] = useState("score_desc");
+  const [matchedWallets, setMatchedWallets] = useState(0);
+  const [scannedWallets, setScannedWallets] = useState(0);
 
   const apiUrl = API_BASE_URL;
 
@@ -83,18 +90,28 @@ export default function WalletsPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${apiUrl}/api/v1/wallets?limit=50`, { cache: "no-store" });
-      const payload: { success?: boolean; data?: WalletRow[]; error?: string } = await response.json();
+      const params = new URLSearchParams({ limit: "100", scoreBand, pnlBand, legitimacy, sortBy });
+      const response = await fetch(`${apiUrl}/api/v1/wallets?${params}`, { cache: "no-store" });
+      const payload: {
+        success?: boolean;
+        data?: WalletRow[];
+        error?: string;
+        pagination?: { total: number; scanned: number; limit: number };
+      } = await response.json();
       if (!payload.success || !payload.data) throw new Error(payload.error || "Failed to load wallets");
       setWallets(payload.data);
-      setSelectedAddress((current) => current ?? payload.data?.[0]?.address ?? null);
+      setMatchedWallets(payload.pagination?.total ?? payload.data.length);
+      setScannedWallets(payload.pagination?.scanned ?? payload.data.length);
+      setSelectedAddress((current) => (
+        payload.data?.some((wallet) => wallet.address === current) ? current : payload.data?.[0]?.address ?? null
+      ));
     } catch (fetchError) {
       setWallets([]);
       setError(fetchError instanceof Error ? fetchError.message : "Failed to load wallets");
     } finally {
       setLoading(false);
     }
-  }, [apiUrl]);
+  }, [apiUrl, legitimacy, pnlBand, scoreBand, sortBy]);
 
   useEffect(() => {
     void fetchWallets();
@@ -144,14 +161,21 @@ export default function WalletsPage() {
   const totalPnl = wallets.reduce((sum, wallet) => sum + (wallet.performance?.totalPnlUsd ?? 0), 0);
   const openPositions = wallets.reduce((sum, wallet) => sum + wallet.openPositions.length, 0);
 
-  if (loading) return <LoadingRows rows={5} />;
+  function resetFilters() {
+    setScoreBand("all");
+    setPnlBand("all");
+    setLegitimacy("all");
+    setSortBy("score_desc");
+  }
+
+  if (loading && wallets.length === 0) return <LoadingRows rows={5} />;
 
   return (
     <div className="space-y-4">
       {error ? <ErrorState title="Wallet surface degraded" message={error} /> : null}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Tracked Wallets" value={wallets.length} tone="primary" />
+        <MetricCard label="Matched Wallets" value={`${matchedWallets}/${scannedWallets}`} tone="primary" />
         <MetricCard label="Qualified" value={qualifiedCount} tone={qualifiedCount ? "success" : "default"} />
         <MetricCard label="Open Positions" value={openPositions} tone={openPositions ? "warning" : "default"} />
         <MetricCard label="Total PnL" value={formatUsd(totalPnl)} tone={totalPnl >= 0 ? "success" : "danger"} />
@@ -159,6 +183,69 @@ export default function WalletsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
         <div className="space-y-4">
+          <Panel title="Intelligence Filters" icon={<SlidersHorizontal className="h-4 w-4" />}>
+            <div className="grid gap-3 p-standard sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
+              <AegisSelect
+                label="Wallet score"
+                value={scoreBand}
+                onChange={setScoreBand}
+                options={[
+                  { label: "Any score", value: "all" },
+                  { label: "Elite 80+", value: "elite" },
+                  { label: "Strong 60-79", value: "strong" },
+                  { label: "Watch 40-59", value: "watch" },
+                  { label: "Weak under 40", value: "weak" },
+                  { label: "Unscored", value: "unscored" },
+                ]}
+              />
+              <AegisSelect
+                label="PnL"
+                value={pnlBand}
+                onChange={setPnlBand}
+                options={[
+                  { label: "Any PnL", value: "all" },
+                  { label: "Profitable", value: "profitable" },
+                  { label: "$1K+ PnL", value: "pnl_1k" },
+                  { label: "$10K+ PnL", value: "pnl_10k" },
+                  { label: "Losing", value: "losing" },
+                  { label: "Breakeven", value: "breakeven" },
+                  { label: "Unknown PnL", value: "unknown" },
+                ]}
+              />
+              <AegisSelect
+                label="Legitimacy"
+                value={legitimacy}
+                onChange={setLegitimacy}
+                options={[
+                  { label: "Any legitimacy", value: "all" },
+                  { label: "Trusted", value: "trusted" },
+                  { label: "Qualified", value: "qualified" },
+                  { label: "Flagged risk", value: "flagged" },
+                  { label: "Unknown", value: "unknown" },
+                ]}
+              />
+              <AegisSelect
+                label="Rank by"
+                value={sortBy}
+                onChange={setSortBy}
+                options={[
+                  { label: "Score high", value: "score_desc" },
+                  { label: "PnL high", value: "pnl_desc" },
+                  { label: "Win rate high", value: "win_rate_desc" },
+                  { label: "Recent activity", value: "recent" },
+                ]}
+              />
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="flex h-10 items-center justify-center gap-2 rounded-sm border border-outline bg-surface-container px-4 font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant transition-colors hover:border-primary/50 hover:text-on-surface sm:col-span-2 xl:col-span-1"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Reset
+              </button>
+            </div>
+          </Panel>
+
           <Panel title="Track Wallet" icon={<Plus className="h-4 w-4" />}>
             <div className="grid gap-3 p-standard md:grid-cols-[2fr_1fr_auto]">
               <input
@@ -186,6 +273,7 @@ export default function WalletsPage() {
               ) : (
                 wallets.map((wallet) => {
                   const active = selectedWallet?.id === wallet.id;
+                  const flagged = ["bot", "insider", "bundler"].includes(wallet.classification);
                   return (
                     <button
                       key={wallet.id}
@@ -196,7 +284,7 @@ export default function WalletsPage() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-semibold text-on-surface">{wallet.label || wallet.latestLabel?.label || "Tracked Wallet"}</p>
-                            <StatusBadge tone={wallet.qualification?.isQualified ? "success" : "default"}>
+                            <StatusBadge tone={flagged ? "danger" : wallet.qualification?.isQualified ? "success" : "default"}>
                               {wallet.classification}
                             </StatusBadge>
                           </div>
@@ -204,6 +292,17 @@ export default function WalletsPage() {
                           <p className="mt-2 text-sm text-on-surface-variant">
                             {wallet.totalTrades} trades - last seen {formatRelative(wallet.lastSeenAt)}
                           </p>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.1em] text-on-surface-variant">
+                            <span>
+                              PnL <span className={(wallet.performance?.totalPnlUsd ?? 0) >= 0 ? "text-success" : "text-destructive"}>{formatUsd(wallet.performance?.totalPnlUsd)}</span>
+                            </span>
+                            <span>
+                              Win <span className="text-on-surface">{wallet.performance?.winRate !== null && wallet.performance?.winRate !== undefined ? `${Math.round(wallet.performance.winRate * 100)}%` : "n/a"}</span>
+                            </span>
+                            <span className={wallet.qualification?.isQualified ? "text-success" : "text-on-surface-variant"}>
+                              {wallet.qualification?.isQualified ? "Qualified" : "Unqualified"}
+                            </span>
+                          </div>
                         </div>
                         <div className="text-right">
                           <p className={`font-mono text-xl ${scoreTone(wallet.performance?.score ?? wallet.qualification?.walletScore)}`}>

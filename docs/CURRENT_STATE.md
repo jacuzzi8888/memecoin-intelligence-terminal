@@ -17,6 +17,7 @@
 - Every discovered token receives a deduplicated `system-market-scan` observation so the scanner can show the broad observed market.
 - Alerts are separate from market observations. An alert is created only when an active versioned strategy actually matches.
 - Scanner filters support timeframe, liquidity, market cap, volume, pair age, source, discovery source, priority, wallet evidence, qualified wallets, bundler exclusion, score, and text search.
+- Wallet Intelligence filters the discovered wallet set by score band, PnL band, and legitimacy, with score, PnL, win-rate, and recency ranking.
 - Research is an evidence workbench backed by current scanner observations, not a placeholder.
 - Token and terminal surfaces do not draw synthetic price charts or show fabricated quotes, fees, TPS, gas, or latency.
 - Phase 3 trading remains disabled. No quote, signing, simulation, or transaction submission path is presented as live.
@@ -65,6 +66,7 @@ Verified in the current workspace:
 - API, web, indexer, processor, database, and intelligence TypeScript checks
 - Repository-wide ESLint checks, including Next.js core web vitals and React hooks
 - API unit tests, including personal write access
+- API wallet-filter tests covering trusted/profitable and flagged/losing classifications
 - Intelligence unit tests, including strict strategy and uncertainty-aware risk behavior
 - Indexer unit tests, including market observation without false alerts
 - Web unit tests for personal-key request handling
@@ -78,6 +80,7 @@ Verified in production on 2026-08-10:
 - Production scanner returned current DexScreener observations with varied signal scores, current market fields, pair ages, and wallet evidence.
 - Unauthenticated mutations returned `401`; the saved personal key verified successfully and an authorized mainnet live scan reported healthy chain and market providers.
 - The Vercel production build completed all 13 routes and was promoted to the stable web alias.
+- Wallet Intelligence score, PnL, legitimacy, and ranking controls were deployed and verified against the production API and web surface.
 
 ## Remaining Gates
 
