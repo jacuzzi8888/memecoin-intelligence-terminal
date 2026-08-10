@@ -85,6 +85,12 @@ Verified in production on 2026-08-10:
 - Unauthenticated mutations returned `401`; the saved personal key verified successfully and an authorized mainnet live scan reported healthy chain and market providers.
 - The Vercel production build completed all 13 routes and was promoted to the stable web alias.
 - Wallet Intelligence score, PnL, legitimacy, and ranking controls were deployed and verified against the production API and web surface.
+- The operator-workflow rebuild was deployed to the stable Vercel alias and browser-verified across Dashboard, Scanner, Research, Alerts, Wallets, Strategies, Terminal, and Settings with no application console errors.
+- The live dashboard exposed 457 observed tokens, 118 ranked observations, 370 active wallets, varied scores, fresh timestamps, and 24 strategy alerts awaiting review at verification time.
+- Scanner liquidity filtering was corrected to evaluate the latest rendered market snapshot. The production `$15k-$50k` request returned 20 matches with zero out-of-range rows, and the browser showed the same 20-match result.
+- Wallet PnL filtering returned 109 profitable wallets from 374 persisted wallets at verification time.
+- Terminal rendered fresh market snapshots and its Phase 3 readiness gate while exposing zero Buy or Sell controls.
+- Local responsive browser verification confirmed keyboard access to all seven timeframe options, persistent degraded-state controls, visible mobile navigation, and no page-level scanner overflow.
 
 ## Remaining Gates
 
