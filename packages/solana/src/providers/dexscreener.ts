@@ -36,6 +36,7 @@ interface DexScreenerCacheEntry {
 const tokenResponseCache = new Map<string, DexScreenerCacheEntry>();
 const tokenResponseRequests = new Map<string, Promise<DexScreenerResponse | null>>();
 const tokenResponseBackoff = new Map<string, number>();
+const DEXSCREENER_BATCH_SIZE = 30;
 
 function readDuration(name: string, fallback: number) {
   const parsed = Number(process.env[name]);
@@ -53,47 +54,108 @@ function readRetryAfter(response: Response) {
   return Number.isNaN(retryAt) ? 60_000 : Math.max(retryAt - Date.now(), 1_000);
 }
 
-export async function fetchDexScreenerTokenData(address: string): Promise<DexScreenerResponse | null> {
-  const now = Date.now();
+function getCachedTokenData(address: string, now: number) {
   const cached = tokenResponseCache.get(address);
-  if (cached && now < cached.expiresAt) return cached.data;
-  if ((tokenResponseBackoff.get(address) ?? 0) > now) {
-    return cached && now < cached.staleUntil ? cached.data : null;
+  return cached && now < cached.staleUntil ? cached.data : null;
+}
+
+function splitIntoBatches<T>(items: T[], size: number) {
+  const batches: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    batches.push(items.slice(index, index + size));
   }
+  return batches;
+}
 
-  const pending = tokenResponseRequests.get(address);
-  if (pending) return pending;
+async function fetchDexScreenerBatch(addresses: string[]) {
+  const fallback = new Map(addresses.map((address) => [address, getCachedTokenData(address, Date.now())]));
 
-  const request = (async () => {
-    try {
-      const response = await fetch(`${DEXSCREENER_API}/dex/tokens/${address}`);
-      if (!response.ok) {
-        const retryMs = response.status === 429 ? readRetryAfter(response) : 30_000;
-        tokenResponseBackoff.set(address, Date.now() + retryMs);
-        log.warn({ address, status: response.status, retryMs }, "DexScreener token request failed");
-        return cached && Date.now() < cached.staleUntil ? cached.data : null;
-      }
+  try {
+    const response = await fetch(`${DEXSCREENER_API}/dex/tokens/${addresses.join(",")}`);
+    if (!response.ok) {
+      const retryMs = response.status === 429 ? readRetryAfter(response) : 30_000;
+      const retryAt = Date.now() + retryMs;
+      for (const address of addresses) tokenResponseBackoff.set(address, retryAt);
+      log.warn({ count: addresses.length, status: response.status, retryMs }, "DexScreener token batch request failed");
+      return fallback;
+    }
 
-      const data = (await response.json()) as DexScreenerResponse;
-      const cachedAt = Date.now();
+    const data = (await response.json()) as DexScreenerResponse;
+    const cachedAt = Date.now();
+    const result = new Map<string, DexScreenerResponse | null>();
+
+    for (const address of addresses) {
+      const tokenData: DexScreenerResponse = {
+        pairs: data.pairs?.filter((pair) => (
+          pair.baseToken?.address === address || pair.quoteToken?.address === address
+        )),
+      };
       tokenResponseCache.set(address, {
-        data,
+        data: tokenData,
         expiresAt: cachedAt + readDuration("DEXSCREENER_TOKEN_CACHE_MS", 15_000),
         staleUntil: cachedAt + readDuration("DEXSCREENER_TOKEN_STALE_MS", 5 * 60_000),
       });
       tokenResponseBackoff.delete(address);
-      return data;
-    } catch (err) {
-      tokenResponseBackoff.set(address, Date.now() + 30_000);
-      log.warn({ address, error: err }, "DexScreener token request failed");
-      return cached && Date.now() < cached.staleUntil ? cached.data : null;
-    } finally {
-      tokenResponseRequests.delete(address);
+      result.set(address, tokenData);
     }
-  })();
 
-  tokenResponseRequests.set(address, request);
-  return request;
+    return result;
+  } catch (err) {
+    const retryAt = Date.now() + 30_000;
+    for (const address of addresses) tokenResponseBackoff.set(address, retryAt);
+    log.warn({ count: addresses.length, error: err }, "DexScreener token batch request failed");
+    return fallback;
+  }
+}
+
+export async function fetchDexScreenerTokenDataBatch(
+  addresses: string[],
+): Promise<Map<string, DexScreenerResponse | null>> {
+  const uniqueAddresses = [...new Set(addresses.filter(Boolean))];
+  const result = new Map<string, DexScreenerResponse | null>();
+  const requests: Array<{ address: string; request: Promise<DexScreenerResponse | null> }> = [];
+  const toFetch: string[] = [];
+  const now = Date.now();
+
+  for (const address of uniqueAddresses) {
+    const cached = tokenResponseCache.get(address);
+    if (cached && now < cached.expiresAt) {
+      result.set(address, cached.data);
+      continue;
+    }
+    if ((tokenResponseBackoff.get(address) ?? 0) > now) {
+      result.set(address, getCachedTokenData(address, now));
+      continue;
+    }
+
+    const pending = tokenResponseRequests.get(address);
+    if (pending) requests.push({ address, request: pending });
+    else toFetch.push(address);
+  }
+
+  for (const batch of splitIntoBatches(toFetch, DEXSCREENER_BATCH_SIZE)) {
+    const batchRequest = fetchDexScreenerBatch(batch);
+    for (const address of batch) {
+      const request = batchRequest.then((batchResult) => batchResult.get(address) ?? null);
+      tokenResponseRequests.set(address, request);
+      requests.push({ address, request });
+    }
+  }
+
+  await Promise.all(requests.map(async ({ address, request }) => {
+    try {
+      result.set(address, await request);
+    } finally {
+      if (tokenResponseRequests.get(address) === request) tokenResponseRequests.delete(address);
+    }
+  }));
+
+  return result;
+}
+
+export async function fetchDexScreenerTokenData(address: string): Promise<DexScreenerResponse | null> {
+  const result = await fetchDexScreenerTokenDataBatch([address]);
+  return result.get(address) ?? null;
 }
 
 export class DexScreenerProvider implements IMarketDataProvider {

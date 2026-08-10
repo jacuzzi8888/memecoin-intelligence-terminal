@@ -5,6 +5,7 @@ export { HeliusProvider } from "./providers/helius.js";
 export {
   DexScreenerProvider,
   fetchDexScreenerTokenData,
+  fetchDexScreenerTokenDataBatch,
   type DexScreenerResponse,
 } from "./providers/dexscreener.js";
 export { BirdeyeProvider } from "./providers/birdeye.js";

@@ -12,6 +12,7 @@ import {
 import { generateDeepLinks } from "@memecoin/notifications";
 import {
   fetchDexScreenerTokenData,
+  fetchDexScreenerTokenDataBatch,
   type IProviderRegistry,
   type MarketData,
   type TokenInfo,
@@ -708,6 +709,7 @@ async function buildDexScreenerEvents(
 ): Promise<DiscoveredTokenEvent[]> {
   const events: DiscoveredTokenEvent[] = [];
   const seen = new Set<string>();
+  await fetchDexScreenerTokenDataBatch(candidates.map((candidate) => candidate.tokenAddress));
 
   for (const candidate of candidates) {
     if (seen.has(candidate.tokenAddress)) continue;

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DexScreenerProvider, fetchDexScreenerTokenData } from "../dexscreener.js";
+import {
+  DexScreenerProvider,
+  fetchDexScreenerTokenData,
+  fetchDexScreenerTokenDataBatch,
+} from "../dexscreener.js";
 
 describe("DexScreenerProvider", () => {
   afterEach(() => {
@@ -35,5 +39,31 @@ describe("DexScreenerProvider", () => {
     expect(raw?.pairs?.[0]?.baseToken.symbol).toBe("CACHE");
     expect(marketData?.liquidityUsd).toBe(75_000);
     expect(pools).toHaveLength(1);
+  });
+
+  it("fetches large token sets in batches of no more than 30 addresses", async () => {
+    const addresses = Array.from({ length: 31 }, (_, index) => `BatchMint${index}`);
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const requested = String(input).split("/").at(-1)?.split(",") ?? [];
+      return {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          pairs: requested.map((address) => ({
+            pairAddress: `pair-${address}`,
+            baseToken: { address, name: address, symbol: "BATCH" },
+            quoteToken: { address: "quote-1", name: "USD Coin", symbol: "USDC" },
+          })),
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchDexScreenerTokenDataBatch(addresses);
+    const lastAddress = addresses.at(-1);
+    if (!lastAddress) throw new Error("Expected a final batch address");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.size).toBe(31);
+    expect(result.get(lastAddress)?.pairs?.[0]?.baseToken.address).toBe(lastAddress);
   });
 });
