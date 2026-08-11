@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { logger } from "@memecoin/logger";
+import { logger, redactUrlCredentials } from "@memecoin/logger";
 import type { TokenEvent } from "@memecoin/solana";
 
 const log = logger("token-discovery");
@@ -25,7 +25,10 @@ export class TokenDiscoveryService {
     this.connection = new Connection(config.rpcUrl, "confirmed");
     this.pollIntervalMs = config.pollIntervalMs || 10_000;
     this.lookbackSlots = config.lookbackSlots || 100;
-    log.info({ rpcUrl: config.rpcUrl }, "Token discovery service initialized");
+    log.info(
+      { rpcUrl: redactUrlCredentials(config.rpcUrl) },
+      "Token discovery service initialized",
+    );
   }
 
   async start(): Promise<void> {

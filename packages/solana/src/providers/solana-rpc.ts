@@ -6,7 +6,7 @@ import type {
   ProviderHealth,
 } from "../types.js";
 import type { IBlockchainDataProvider } from "../interfaces.js";
-import { logger } from "@memecoin/logger";
+import { logger, redactUrlCredentials } from "@memecoin/logger";
 
 const log = logger("solana-rpc-provider");
 
@@ -24,7 +24,10 @@ export class SolanaRpcProvider implements IBlockchainDataProvider {
       rpcUrl || process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
       "confirmed",
     );
-    log.info({ rpcUrl: this.connection.rpcEndpoint }, "Solana RPC provider initialized");
+    log.info(
+      { rpcUrl: redactUrlCredentials(this.connection.rpcEndpoint) },
+      "Solana RPC provider initialized",
+    );
   }
 
   async getTransaction(signature: string): Promise<TransactionData | null> {

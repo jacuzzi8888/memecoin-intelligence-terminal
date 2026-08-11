@@ -4,7 +4,7 @@ import { HeliusProvider } from "./helius.js";
 import { DexScreenerProvider } from "./dexscreener.js";
 import { BirdeyeProvider } from "./birdeye.js";
 import { HeliusStreamProvider } from "./helius-stream.js";
-import { logger } from "@memecoin/logger";
+import { logger, redactUrlCredentials } from "@memecoin/logger";
 
 const log = logger("provider-registry");
 
@@ -77,7 +77,7 @@ export function createProviderRegistry(config: ProviderConfig = {}): IProviderRe
   const rpcUrl = config.solanaRpcUrl || process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 
   log.info(
-    { helius: useHelius, rpcUrl },
+    { helius: useHelius, rpcUrl: redactUrlCredentials(rpcUrl) },
     "Creating provider registry",
   );
 

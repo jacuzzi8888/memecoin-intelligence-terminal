@@ -33,5 +33,29 @@ function logger(name: string): pino.Logger {
   return rootLogger.child({ module: name });
 }
 
-export { rootLogger, logger, createLogger };
+const SENSITIVE_QUERY_PARAMETERS = new Set([
+  "access_token",
+  "api-key",
+  "apikey",
+  "api_key",
+  "key",
+  "secret",
+  "token",
+]);
+
+function redactUrlCredentials(value: string): string {
+  try {
+    const url = new URL(value);
+    for (const key of url.searchParams.keys()) {
+      if (SENSITIVE_QUERY_PARAMETERS.has(key.toLowerCase())) {
+        url.searchParams.set(key, "[REDACTED]");
+      }
+    }
+    return url.toString();
+  } catch {
+    return "[INVALID_URL]";
+  }
+}
+
+export { rootLogger, logger, createLogger, redactUrlCredentials };
 export type Logger = pino.Logger;

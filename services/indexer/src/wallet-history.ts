@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { logger } from "@memecoin/logger";
+import { logger, redactUrlCredentials } from "@memecoin/logger";
 import { fetchHelius } from "./helius-rate-limit.js";
 
 const log = logger("wallet-history-service");
@@ -39,7 +39,10 @@ export class WalletHistoryService {
   constructor(rpcUrl: string, heliusApiKey: string) {
     this.connection = new Connection(rpcUrl);
     this.heliusApiKey = heliusApiKey;
-    log.info({ rpcUrl, hasApiKey: !!heliusApiKey }, "Wallet history service initialized");
+    log.info(
+      { rpcUrl: redactUrlCredentials(rpcUrl), hasApiKey: !!heliusApiKey },
+      "Wallet history service initialized",
+    );
   }
 
   async getWalletTransactions(walletAddress: string, limit: number = 100): Promise<any[]> {
