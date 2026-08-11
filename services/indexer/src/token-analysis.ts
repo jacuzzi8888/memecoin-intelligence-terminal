@@ -169,7 +169,7 @@ async function persistHolderSnapshot(
       rank: index + 1,
       balance: holder.balance,
       percentage: Number.isFinite(holder.percentage) ? holder.percentage.toFixed(6) : null,
-      source: "helius-rpc-getTokenLargestAccounts",
+      source: "solana-rpc-getTokenLargestAccounts",
       snapshotAt,
     });
     inserted++;

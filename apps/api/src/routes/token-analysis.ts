@@ -228,10 +228,13 @@ export const tokenAnalysisRoute: FastifyPluginAsync = async (app) => {
       : [];
     const relationshipById = new Map([...firstHop, ...secondHop].map((relationship) => [relationship.id, relationship]));
     const relationships = [...relationshipById.values()];
-    const graphWalletIds = [...new Set(relationships.flatMap((relationship) => [
-      relationship.walletAId,
-      relationship.walletBId,
-    ]))];
+    const graphWalletIds = [...new Set([
+      ...seedWalletIds,
+      ...relationships.flatMap((relationship) => [
+        relationship.walletAId,
+        relationship.walletBId,
+      ]),
+    ])];
     const [graphWallets, graphPerformance] = await Promise.all([
       graphWalletIds.length > 0
         ? db.select().from(schema.wallets).where(inArray(schema.wallets.id, graphWalletIds))
@@ -273,7 +276,9 @@ export const tokenAnalysisRoute: FastifyPluginAsync = async (app) => {
         coverage: {
           holders: typeof coverage.holders === "string" ? coverage.holders : (holders.length ? "top_20" : "unavailable"),
           buyers: typeof coverage.buyers === "string" ? coverage.buyers : (tradeRows.length ? "indexed_and_observed" : "unavailable"),
-          relationships: relationships.length ? "persisted_evidence" : "unavailable",
+          relationships: typeof coverage.relationships === "string"
+            ? coverage.relationships
+            : relationships.length ? "persisted_evidence" : "unavailable",
           funding: typeof coverage.funding === "string" ? coverage.funding : "unavailable",
         },
         holders,
