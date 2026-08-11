@@ -32,6 +32,10 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
   }
 
   async getNewTokens(since: Date): Promise<TokenEvent[]> {
+    if (process.env.HELIUS_TOKEN_PROGRAM_DISCOVERY_ENABLED !== "true") {
+      return [];
+    }
+
     try {
       const response = await fetchHelius(this.rpcUrl, {
         method: "POST",
