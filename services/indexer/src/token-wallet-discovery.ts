@@ -56,6 +56,7 @@ export interface SingleTokenWalletDiscoveryOptions {
 }
 
 export interface TokenWalletDiscoveryResult {
+  sourceAvailable: boolean;
   tokensScanned: number;
   transactionsFetched: number;
   candidatesFound: number;
@@ -94,8 +95,7 @@ async function fetchTokenTransactions(
   tokenAddress: string,
   heliusApiKey: string,
   limit: number,
-  strict = false,
-): Promise<HeliusEnhancedTransaction[]> {
+): Promise<{ transactions: HeliusEnhancedTransaction[]; sourceAvailable: boolean }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HELIUS_TIMEOUT_MS);
 
@@ -110,16 +110,17 @@ async function fetchTokenTransactions(
     });
     if (!response.ok) {
       log.warn({ tokenAddress, status: response.status }, "Token transaction discovery request failed");
-      if (strict) throw new Error(`Token transaction provider unavailable (${response.status})`);
-      return [];
+      return { transactions: [], sourceAvailable: false };
     }
 
     const data = await response.json();
-    return Array.isArray(data) ? data as HeliusEnhancedTransaction[] : [];
+    return {
+      transactions: Array.isArray(data) ? data as HeliusEnhancedTransaction[] : [],
+      sourceAvailable: true,
+    };
   } catch (error) {
     log.warn({ error, tokenAddress }, "Token transaction discovery request errored");
-    if (strict) throw error;
-    return [];
+    return { transactions: [], sourceAvailable: false };
   } finally {
     clearTimeout(timeout);
   }
@@ -295,9 +296,12 @@ export async function discoverWalletsFromRecentTokens(
   const tokenAddresses = await getRecentSignalTokenAddresses(since, tokenLimit);
   const candidates = new Map<string, WalletCandidateEvidence>();
   let transactionsFetched = 0;
+  let sourceAvailable = true;
 
   for (const tokenAddress of tokenAddresses) {
-    const transactions = await fetchTokenTransactions(tokenAddress, options.heliusApiKey, transactionsPerToken);
+    const fetched = await fetchTokenTransactions(tokenAddress, options.heliusApiKey, transactionsPerToken);
+    const transactions = fetched.transactions;
+    sourceAvailable = sourceAvailable && fetched.sourceAvailable;
     transactionsFetched += transactions.length;
 
     const tokenCandidates = extractWalletCandidates(tokenAddress, transactions);
@@ -370,6 +374,7 @@ export async function discoverWalletsFromRecentTokens(
   }, "Token wallet discovery complete");
 
   return {
+    sourceAvailable,
     tokensScanned: tokenAddresses.length,
     transactionsFetched,
     candidatesFound: candidatesByAddress.length,
@@ -405,12 +410,12 @@ export async function discoverWalletsForToken(
   const transactionsPerToken = clampPositiveInteger(options.transactionsPerToken, 100, 100);
   const walletLimit = clampPositiveInteger(options.walletLimit, 12, 30);
   const minCandidateScore = options.minCandidateScore ?? 5;
-  const transactions = await fetchTokenTransactions(
+  const fetched = await fetchTokenTransactions(
     options.tokenAddress,
     options.heliusApiKey,
     transactionsPerToken,
-    true,
   );
+  const transactions = fetched.transactions;
   const candidates = [...extractWalletCandidates(options.tokenAddress, transactions).values()]
     .filter((candidate) => candidate.score >= minCandidateScore)
     .sort((left, right) => right.score - left.score || right.txCount - left.txCount)
@@ -440,6 +445,7 @@ export async function discoverWalletsForToken(
   }
 
   return {
+    sourceAvailable: fetched.sourceAvailable,
     tokensScanned: 1,
     transactionsFetched: transactions.length,
     candidatesFound: candidates.length,

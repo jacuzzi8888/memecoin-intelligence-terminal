@@ -144,8 +144,10 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
   async getTokenHolders(address: string, limit?: number): Promise<HolderInfo[]> {
     try {
       const requestedLimit = Math.max(1, Math.min(limit ?? 20, 20));
+      const holderRpcUrl = process.env.SOLANA_HOLDER_RPC_URL
+        || "https://public.rpc.solanavibestation.com";
       const [largestAccountsResponse, supplyResponse] = await Promise.all([
-        fetchHelius(this.rpcUrl, {
+        fetchHelius(holderRpcUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -155,7 +157,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
             params: [address],
           }),
         }),
-        fetchHelius(this.rpcUrl, {
+        fetchHelius(holderRpcUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -181,7 +183,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
         .slice(0, requestedLimit);
       if (largestAccounts.length === 0) return [];
 
-      const ownersResponse = await fetchHelius(this.rpcUrl, {
+      const ownersResponse = await fetchHelius(holderRpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

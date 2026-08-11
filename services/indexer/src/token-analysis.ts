@@ -381,8 +381,8 @@ export interface TokenAnalysisResult {
   repeatEarlyBuyers: number;
   coverage: {
     holders: "top_20" | "unavailable";
-    buyers: "indexed_and_observed" | "no_swaps_observed";
-    relationships: "co_entry_and_repeat_deployer" | "no_relationships_observed";
+    buyers: "indexed_and_observed" | "no_swaps_observed" | "provider_unavailable";
+    relationships: "co_entry_and_repeat_deployer" | "no_relationships_observed" | "provider_unavailable";
     funding: "unavailable";
   };
 }
@@ -428,10 +428,16 @@ export async function runTokenAnalysisPipeline(tokenAddress: string): Promise<To
     repeatEarlyBuyers: relationships.repeatEarlyBuyers,
     coverage: {
       holders: holderSnapshot.inserted > 0 ? "top_20" : "unavailable",
-      buyers: walletDiscovery.transactionsFetched > 0 ? "indexed_and_observed" : "no_swaps_observed",
-      relationships: relationships.relationshipsDetected > 0
-        ? "co_entry_and_repeat_deployer"
-        : "no_relationships_observed",
+      buyers: !walletDiscovery.sourceAvailable
+        ? "provider_unavailable"
+        : walletDiscovery.transactionsFetched > 0
+          ? "indexed_and_observed"
+          : "no_swaps_observed",
+      relationships: !walletDiscovery.sourceAvailable
+        ? "provider_unavailable"
+        : relationships.relationshipsDetected > 0
+          ? "co_entry_and_repeat_deployer"
+          : "no_relationships_observed",
       funding: "unavailable",
     },
   };
