@@ -146,66 +146,87 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
       const requestedLimit = Math.max(1, Math.min(limit ?? 20, 20));
       const holderRpcUrl = process.env.SOLANA_HOLDER_RPC_URL
         || "https://public.rpc.solanavibestation.com";
-      const [largestAccountsResponse, supplyResponse] = await Promise.all([
-        fetchHelius(holderRpcUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "largest-token-accounts",
-            method: "getTokenLargestAccounts",
-            params: [address],
-          }),
+      const holderDetailsRpcUrl = process.env.SOLANA_HOLDER_DETAILS_RPC_URL
+        || "https://api.mainnet-beta.solana.com";
+      const largestAccountsResponse = await fetchHelius(holderRpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "largest-token-accounts",
+          method: "getTokenLargestAccounts",
+          params: [address],
         }),
-        fetchHelius(holderRpcUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "token-supply",
-            method: "getTokenSupply",
-            params: [address],
-          }),
-        }),
-      ]);
-      if (!largestAccountsResponse.ok || !supplyResponse.ok) {
-        throw new Error(`Holder RPC unavailable (${largestAccountsResponse.status}/${supplyResponse.status})`);
+      });
+      if (!largestAccountsResponse.ok) {
+        throw new Error(`Holder ranking RPC unavailable (${largestAccountsResponse.status})`);
       }
 
       const largestAccountsPayload = (await largestAccountsResponse.json()) as {
+        error?: { code?: number; message?: string };
         result?: { value?: Array<{ address?: string; amount?: string; decimals?: number }> };
       };
-      const supplyPayload = (await supplyResponse.json()) as {
-        result?: { value?: { amount?: string; decimals?: number } };
-      };
+      if (largestAccountsPayload.error) {
+        throw new Error(`Holder ranking RPC error: ${largestAccountsPayload.error.message ?? largestAccountsPayload.error.code ?? "unknown"}`);
+      }
       const largestAccounts = (largestAccountsPayload.result?.value ?? [])
         .filter((account): account is { address: string; amount: string; decimals?: number } => Boolean(account.address && account.amount))
         .slice(0, requestedLimit);
       if (largestAccounts.length === 0) return [];
 
-      const ownersResponse = await fetchHelius(holderRpcUrl, {
+      // Use one JSON-RPC batch so public endpoints only receive one details request.
+      const detailsResponse = await fetchHelius(holderDetailsRpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "largest-token-account-owners",
-          method: "getMultipleAccounts",
-          params: [
-            largestAccounts.map((account) => account.address),
-            { encoding: "jsonParsed" },
-          ],
-        }),
+        body: JSON.stringify([
+          {
+            jsonrpc: "2.0",
+            id: "token-supply",
+            method: "getTokenSupply",
+            params: [address],
+          },
+          {
+            jsonrpc: "2.0",
+            id: "largest-token-account-owners",
+            method: "getMultipleAccounts",
+            params: [
+              largestAccounts.map((account) => account.address),
+              { encoding: "jsonParsed" },
+            ],
+          },
+        ]),
       });
-      if (!ownersResponse.ok) throw new Error(`Holder owner RPC unavailable (${ownersResponse.status})`);
-      const ownersPayload = (await ownersResponse.json()) as {
-        result?: { value?: Array<{ data?: { parsed?: { info?: { owner?: string } } } } | null> };
-      };
-      const decimals = supplyPayload.result?.value?.decimals ?? 9;
-      const supply = Number(supplyPayload.result?.value?.amount ?? 0);
+      if (!detailsResponse.ok) {
+        throw new Error(`Holder details RPC unavailable (${detailsResponse.status})`);
+      }
+      const detailsPayload = (await detailsResponse.json()) as Array<{
+        id?: string;
+        error?: { code?: number; message?: string };
+        result?: {
+          value?: { amount?: string; decimals?: number }
+            | Array<{ data?: { parsed?: { info?: { owner?: string } } } } | null>;
+        };
+      }>;
+      if (!Array.isArray(detailsPayload)) {
+        throw new Error("Holder details RPC returned an invalid batch response");
+      }
+      const supplyPayload = detailsPayload.find((item) => item.id === "token-supply");
+      const ownersPayload = detailsPayload.find((item) => item.id === "largest-token-account-owners");
+      const rpcError = supplyPayload?.error ?? ownersPayload?.error;
+      if (rpcError) {
+        throw new Error(`Holder details RPC error: ${rpcError.message ?? rpcError.code ?? "unknown"}`);
+      }
+      const supplyValue = supplyPayload?.result?.value;
+      const ownerValues = ownersPayload?.result?.value;
+      if (!supplyValue || Array.isArray(supplyValue) || !Array.isArray(ownerValues)) {
+        throw new Error("Holder details RPC omitted supply or owner data");
+      }
+      const decimals = supplyValue.decimals ?? 9;
+      const supply = Number(supplyValue.amount ?? 0);
       const balancesByOwner = new Map<string, number>();
 
       for (const [index, account] of largestAccounts.entries()) {
-        const owner = ownersPayload.result?.value?.[index]?.data?.parsed?.info?.owner;
+        const owner = ownerValues[index]?.data?.parsed?.info?.owner;
         if (!owner) continue;
         const amount = Number(account.amount);
         if (!Number.isFinite(amount) || amount <= 0) continue;
@@ -222,7 +243,10 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
           percentage: supply > 0 ? (balance / supply) * 100 : 0,
         }));
     } catch (err) {
-      log.error({ error: err, address }, "Failed to get token holders from Helius");
+      log.error({
+        error: err instanceof Error ? err.message : String(err),
+        address,
+      }, "Failed to get token holders");
       return [];
     }
   }
