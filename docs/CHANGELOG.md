@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.8] - 2026-08-10
+
+### Added
+
+- Added queued contract-address analysis for unknown and previously indexed Solana tokens
+- Added append-only top-holder snapshots backed by ranked token accounts and parsed owner resolution
+- Added top observed trader and earliest observed buyer analysis with honest coverage labels
+- Added persisted co-entry, repeat co-entry, and repeat-deployer-circle relationships with evidence confidence
+- Added a two-hop wallet relationship map and deployment-circle dossier to token research
+- Added token-analysis queue health reporting and migration `0005_fantastic_avengers.sql`
+
+### Corrected
+
+- Relabeled the wallet-history native swap leg as SOL rather than USD across dashboard, scanner, and token research
+- Kept direct funding paths explicitly unavailable instead of inferring common control from co-entry
+- Allowed Next.js React Refresh evaluation only in development so the local app hydrates while production CSP remains unchanged
+
 ## [0.1.7] - 2026-08-10
 
 ### Fixed

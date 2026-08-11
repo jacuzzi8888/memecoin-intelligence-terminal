@@ -73,6 +73,29 @@ export const tokenSnapshots = pgTable("token_snapshots", {
   snapshotLiquidityIdx: index("token_snapshots_snapshot_liquidity_idx").on(table.snapshotAt, table.liquidityUsd),
 }));
 
+export const tokenHolderSnapshots = pgTable("token_holder_snapshots", {
+  id: text("id").primaryKey(),
+  tokenId: text("token_id").notNull().references(() => tokens.id, { onDelete: "cascade" }),
+  tokenAddress: text("token_address").notNull(),
+  walletId: text("wallet_id").notNull(),
+  walletAddress: text("wallet_address").notNull(),
+  rank: integer("rank").notNull(),
+  balance: numeric("balance", { precision: 78, scale: 0 }).notNull(),
+  percentage: numeric("percentage", { precision: 12, scale: 6 }),
+  source: text("source").notNull(),
+  snapshotAt: timestamp("snapshot_at", { mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+}, (table) => ({
+  tokenHolderSnapshotIdx: index("token_holder_snapshots_token_snapshot_idx").on(
+    table.tokenAddress,
+    table.snapshotAt,
+  ),
+  holderWalletSnapshotIdx: index("token_holder_snapshots_wallet_snapshot_idx").on(
+    table.walletAddress,
+    table.snapshotAt,
+  ),
+}));
+
 export const marketSnapshots = pgTable("market_snapshots", {
   id: text("id").primaryKey(),
   marketId: text("market_id").notNull().references(() => markets.id),

@@ -1,7 +1,7 @@
 # Current State
 
 **Last Updated**: 2026-08-10
-**Current Phase**: Phase 2.6, evidence accumulation and strategy proof
+**Current Phase**: Phase 2.7, operator value and contract intelligence
 **Deployment State**: Live. The web app runs on Vercel and the API, indexer, PostgreSQL, and Redis run on Railway under the `jacuzzi8888` project accounts. Migration `0004`, personal write access, embedded workers, and 15-second discovery are active in production.
 
 ## Production Endpoints
@@ -19,6 +19,7 @@
 - Scanner filters support timeframe, liquidity, market cap, volume, pair age, source, discovery source, priority, wallet evidence, qualified wallets, bundler exclusion, score, and text search.
 - Wallet Intelligence filters the discovered wallet set by score band, PnL band, and legitimacy, with score, PnL, win-rate, and recency ranking.
 - Research is an evidence workbench backed by current scanner observations, not a placeholder.
+- The workspace adds queued contract-address analysis with current holder snapshots, observed early-buyer ordering, top-trader ranking, two-hop wallet relationships, and repeat deployer-circle evidence. This change is not yet deployed.
 - Dashboard, scanner, research, token, wallet, alert, watchlist, strategy, terminal, and settings surfaces now form one deep-linked investigation workflow instead of isolated pages.
 - The dashboard prioritizes operator queues and verified evidence; the previous decorative chart has been removed.
 - Scanner live refresh can be paused, saved views can be restored, result totals and pagination are explicit, and refresh failures retain the last verified ranking.
@@ -38,12 +39,13 @@
 
 ## Runtime State
 
-- Fastify API, PostgreSQL, Redis/BullMQ, indexer, processor, wallet worker, and alert worker are implemented.
+- Fastify API, PostgreSQL, Redis/BullMQ, indexer, processor, wallet worker, token-analysis worker, and alert worker are implemented.
 - The always-on indexer can embed the processor and alert consumer for a low-cost single-service deployment.
 - DexScreener discovery lists are cached with stale fallback and automatic `429` backoff. Token pair lookups are deduplicated and batched in groups of 30.
 - Alert delivery performs a recovery pass on startup, consumes queue jobs, and records delivered, skipped, or failed destinations.
 - Alert outcome backfill runs every 15 minutes by default.
 - API status reports data freshness, pending alerts, queue depth, dead letters, and persisted entity counts.
+- Migration `0005_fantastic_avengers.sql` adds append-only token-holder snapshots and wallet-relationship indexes. It remains pending in production.
 - Database migration `0004_sudden_baron_zemo.sql` adds query indexes, the market observation strategy, corrected strategy configs, and supersedes invalid legacy alerts.
 - The container runs as a non-root user and supports `api`, `indexer`, `processor`, and `alerts` roles.
 
@@ -97,7 +99,8 @@ Verified in production on 2026-08-10:
 - Enter the saved personal key in Settings for each browser that will perform mutations; read-only market data remains public.
 - Review and retry or supersede the existing wallet-sync dead letters after confirming their provider failure causes.
 - Accumulate enough fresh wallet-enriched snapshots and reviewed alert outcomes to evaluate strategy edge.
-- Implement and validate funding-relationship and wallet-cluster evidence required by the PRD.
+- Deploy migration `0005`, the token-analysis worker, API routes, and contract-intelligence UI, then verify one fresh and one previously indexed contract end to end.
+- Implement direct funding-source evidence. Co-entry and repeat-deployer links are useful behavioral evidence but are not funding proof.
 - Improve launch coverage beyond DexScreener profiles/boosts if near-firehose coverage is required.
 - Add repeatable browser tests for the core investigation flow, responsive layouts, write unlock, and degraded-data retention.
 - Complete API/database performance and load testing after real dataset growth is observed.

@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   createAlertDeliveryQueue,
   createRawEventProcessingQueue,
+  createTokenAnalysisQueue,
   createWalletSyncQueue,
   getQueueStats,
 } from "@memecoin/queue";
@@ -37,6 +38,7 @@ export const statusRoute: FastifyPluginAsync = async (app) => {
       const rawEventQueue = createRawEventProcessingQueue();
       const alertQueue = createAlertDeliveryQueue();
       const walletQueue = createWalletSyncQueue();
+      const tokenAnalysisQueue = createTokenAnalysisQueue();
 
       const [
         tokenCount,
@@ -63,7 +65,9 @@ export const statusRoute: FastifyPluginAsync = async (app) => {
         getQueueStats(rawEventQueue),
         getQueueStats(alertQueue),
         getQueueStats(walletQueue),
+        getQueueStats(tokenAnalysisQueue),
       ]).then((stats) => stats.map((stat) => ({ ...stat, available: true }))).catch(() => [
+        unavailableQueue,
         unavailableQueue,
         unavailableQueue,
         unavailableQueue,
@@ -88,6 +92,7 @@ export const statusRoute: FastifyPluginAsync = async (app) => {
             rawEventProcessing: queueStats[0],
             alertDelivery: queueStats[1],
             walletSync: queueStats[2],
+            tokenAnalysis: queueStats[3],
           },
         },
         requestId: request.id,

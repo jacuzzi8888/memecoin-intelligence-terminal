@@ -167,7 +167,8 @@ export const tokenRoute: FastifyPluginAsync = async (app) => {
             tradeType: trade.tradeType,
             amount: Number(trade.amount),
             priceUsd: trade.priceUsd ? Number(trade.priceUsd) : null,
-            valueUsd: trade.valueUsd ? Number(trade.valueUsd) : null,
+            // Wallet ingestion stores the native SOL leg in this legacy database column.
+            valueSol: trade.valueUsd ? Number(trade.valueUsd) : null,
             txSignature: trade.txSignature,
             tradedAt: trade.tradedAt.toISOString(),
           };
@@ -201,7 +202,7 @@ export const tokenRoute: FastifyPluginAsync = async (app) => {
             id: trade.id,
             type: "wallet_trade",
             title: `${trade.tradeType} ${Number(trade.amount).toLocaleString()}`,
-            detail: `${trade.walletAddress.slice(0, 8)}...${trade.walletAddress.slice(-4)} ${trade.valueUsd ? `$${Number(trade.valueUsd).toLocaleString()}` : ""}`.trim(),
+            detail: `${trade.walletAddress.slice(0, 8)}...${trade.walletAddress.slice(-4)} ${trade.valueUsd ? `${Number(trade.valueUsd).toLocaleString()} SOL` : ""}`.trim(),
             occurredAt: trade.tradedAt.toISOString(),
           })),
           ...eventRows.map((event) => ({

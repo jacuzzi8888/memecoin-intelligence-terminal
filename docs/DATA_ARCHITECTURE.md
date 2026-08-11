@@ -28,6 +28,7 @@ Clean, provider-agnostic domain entities derived from raw facts.
 | `wallets` | Canonical wallet records |
 | `wallet_trades` | Normalized swap/trade records |
 | `wallet_positions` | Current and historical positions |
+| `token_holder_snapshots` | Ranked token-owner balances at an observed point in time |
 
 ### 3. Derived Intelligence
 Calculated values that can be reproduced from raw/normalized data.
@@ -36,7 +37,7 @@ Calculated values that can be reproduced from raw/normalized data.
 |--------|-------------|-----------|
 | `wallet_performance_snapshots` | PnL, win rate, avg hold time | Yes |
 | `wallet_labels` | Classification labels | Yes |
-| `wallet_relationships` | Funding, clustering | Yes |
+| `wallet_relationships` | Co-entry, repeat-deployer, and eventually funding evidence | Yes |
 | `wallet_cohort_memberships` | Elite wallet group membership | Yes |
 | `token_snapshots` | Market metrics at point in time | Yes |
 | `market_snapshots` | Pool metrics at point in time | Yes |
@@ -82,6 +83,7 @@ System state for monitoring, debugging, and reliability.
 │         NORMALIZED LAYER                    │
 │                                             │
 │  tokens, token_launches, markets            │
+│  token_holder_snapshots                     │
 │  wallets, wallet_trades, wallet_positions   │
 │                                             │
 │  Properties:                                │
@@ -175,3 +177,11 @@ When rules change:
 - Backtesting queries
 - Cluster analysis
 - Graph exploration
+
+## Contract Analysis Flow
+
+1. `POST /api/v1/tokens/:address/analyze` creates a BullMQ `token-analysis` job.
+2. The indexer resolves token metadata and market data, resolves the owners of the 20 largest token accounts, and expands observed wallet history.
+3. Deterministic rules persist co-entry, repeat co-entry, and repeat-deployer relationships with source, confidence, timestamps, and supporting token addresses.
+4. `GET /api/v1/tokens/:address/graph` returns current holders, top observed traders, earliest observed buyers, a two-hop graph, deployment history, and explicit coverage gaps.
+5. Direct funding evidence remains unavailable until native-transfer tracing is implemented; it is never inferred from co-entry.

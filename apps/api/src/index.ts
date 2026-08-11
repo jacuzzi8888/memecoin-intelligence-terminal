@@ -11,6 +11,7 @@ import { healthRoute } from "./routes/health.js";
 import { statusRoute } from "./routes/status.js";
 import { scannerRoute } from "./routes/scanner.js";
 import { tokenRoute } from "./routes/tokens.js";
+import { tokenAnalysisRoute } from "./routes/token-analysis.js";
 import { alertsRoute } from "./routes/alerts.js";
 import { strategiesRoute } from "./routes/strategies.js";
 import { dashboardRoute } from "./routes/dashboard.js";
@@ -152,6 +153,7 @@ export async function buildApp() {
   await app.register(dashboardRoute, { prefix: "/api/v1" });
   await app.register(scannerRoute, { prefix: "/api/v1" });
   await app.register(tokenRoute, { prefix: "/api/v1" });
+  await app.register(tokenAnalysisRoute, { prefix: "/api/v1" });
   await app.register(alertsRoute, { prefix: "/api/v1" });
   await app.register(strategiesRoute, { prefix: "/api/v1" });
   await app.register(watchlistsRoute, { prefix: "/api/v1" });

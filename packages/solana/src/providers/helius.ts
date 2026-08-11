@@ -138,18 +138,80 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
 
   async getTokenHolders(address: string, limit?: number): Promise<HolderInfo[]> {
     try {
-      const url = `${this.baseUrl}/token-holders?api-key=${this.apiKey}&mint=${address}&limit=${limit || 100}`;
-      const response = await fetch(url);
-      if (!response.ok) return [];
+      const requestedLimit = Math.max(1, Math.min(limit ?? 20, 20));
+      const [largestAccountsResponse, supplyResponse] = await Promise.all([
+        fetch(this.rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "largest-token-accounts",
+            method: "getTokenLargestAccounts",
+            params: [address],
+          }),
+        }),
+        fetch(this.rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "token-supply",
+            method: "getTokenSupply",
+            params: [address],
+          }),
+        }),
+      ]);
+      if (!largestAccountsResponse.ok || !supplyResponse.ok) return [];
 
-      const data = (await response.json()) as any;
-      const holders = data.token_holders || data || [];
-      return holders.map((h: any) => ({
-        address: h.address || h.owner,
-        balance: h.balance || "0",
-        decimals: h.decimals || 9,
-        percentage: h.percentage || 0,
-      }));
+      const largestAccountsPayload = (await largestAccountsResponse.json()) as {
+        result?: { value?: Array<{ address?: string; amount?: string; decimals?: number }> };
+      };
+      const supplyPayload = (await supplyResponse.json()) as {
+        result?: { value?: { amount?: string; decimals?: number } };
+      };
+      const largestAccounts = (largestAccountsPayload.result?.value ?? [])
+        .filter((account): account is { address: string; amount: string; decimals?: number } => Boolean(account.address && account.amount))
+        .slice(0, requestedLimit);
+      if (largestAccounts.length === 0) return [];
+
+      const ownersResponse = await fetch(this.rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "largest-token-account-owners",
+          method: "getMultipleAccounts",
+          params: [
+            largestAccounts.map((account) => account.address),
+            { encoding: "jsonParsed" },
+          ],
+        }),
+      });
+      if (!ownersResponse.ok) return [];
+      const ownersPayload = (await ownersResponse.json()) as {
+        result?: { value?: Array<{ data?: { parsed?: { info?: { owner?: string } } } } | null> };
+      };
+      const decimals = supplyPayload.result?.value?.decimals ?? 9;
+      const supply = Number(supplyPayload.result?.value?.amount ?? 0);
+      const balancesByOwner = new Map<string, number>();
+
+      for (const [index, account] of largestAccounts.entries()) {
+        const owner = ownersPayload.result?.value?.[index]?.data?.parsed?.info?.owner;
+        if (!owner) continue;
+        const amount = Number(account.amount);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        balancesByOwner.set(owner, (balancesByOwner.get(owner) ?? 0) + amount);
+      }
+
+      return [...balancesByOwner.entries()]
+        .sort(([, left], [, right]) => right - left)
+        .slice(0, requestedLimit)
+        .map(([owner, balance]) => ({
+          address: owner,
+          balance: Math.round(balance).toString(),
+          decimals,
+          percentage: supply > 0 ? (balance / supply) * 100 : 0,
+        }));
     } catch (err) {
       log.error({ error: err, address }, "Failed to get token holders from Helius");
       return [];

@@ -480,7 +480,7 @@ export const scannerRoute: FastifyPluginAsync = async (app) => {
           score: number | null;
           isQualified: boolean;
           tradeType: string;
-          valueUsd: number | null;
+          valueSol: number | null;
           tradedAt: string;
         }>;
       }
@@ -510,7 +510,7 @@ export const scannerRoute: FastifyPluginAsync = async (app) => {
           score: performance?.score ?? null,
           isQualified,
           tradeType: trade.tradeType,
-          valueUsd: trade.valueUsd ? Number(trade.valueUsd) : null,
+          valueSol: trade.valueUsd ? Number(trade.valueUsd) : null,
           tradedAt: trade.tradedAt.toISOString(),
         });
       }

@@ -16,8 +16,8 @@ import {
   MetricCard,
   Panel,
   StatusBadge,
+  formatNumber,
   formatRelative,
-  formatUsd,
   scoreTone,
   shortAddress,
 } from "@/components/aegis-ui";
@@ -77,7 +77,7 @@ interface DashboardData {
     tokenSymbol: string;
     tradeType: string;
     amount: string | number;
-    valueUsd: string | number | null;
+    valueSol: string | number | null;
     tradedAt: string;
   }>;
 }
@@ -415,7 +415,7 @@ export default function DashboardPage() {
                   <th className="px-standard py-3">Wallet</th>
                   <th className="px-3 py-3">Action</th>
                   <th className="px-3 py-3">Token</th>
-                  <th className="px-standard py-3 text-right">Value</th>
+                  <th className="px-standard py-3 text-right">Native Flow</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline">
@@ -451,7 +451,7 @@ export default function DashboardPage() {
                         </Link>
                       </td>
                       <td className="px-standard py-3 text-right font-mono text-on-surface">
-                        {formatUsd(trade.valueUsd === null ? null : Number(trade.valueUsd))}
+                        {trade.valueSol === null ? "n/a" : `${formatNumber(Number(trade.valueSol))} SOL`}
                       </td>
                     </tr>
                   ))

@@ -48,10 +48,10 @@ The terminal is preparation-only. Jupiter quotes, wallet connection, simulation,
 **Severity**: Medium
 The production wallet queue contains failed jobs from provider-limited sync attempts. Worker health reports these for operator review, but they no longer incorrectly mark otherwise-fresh market data as globally degraded. The failed jobs should be reviewed and retried or superseded, not silently cleared.
 
-### KI-011: Wallet relationships and clusters are not implemented
+### KI-011: Funding relationships are not yet available
 
 **Severity**: High
-Wallet performance, legitimacy, qualification, positions, and recent activity are available, but funding relationships, cluster membership, and graph evidence required by FR-2 are not yet produced by the backend. The UI reports this evidence as unavailable rather than inferring or fabricating relationships. This must be completed before the Phase 2 evidence gate can pass.
+The workspace now persists evidence-backed same-token co-entry, repeat co-entry, and repeat-deployer-circle relationships and exposes a two-hop graph. Direct SOL funding sources and shared-funder links are still unavailable. The UI explicitly labels funding coverage as unavailable and must not treat behavioral co-entry as proof of common control. Migration `0005` and the token-analysis worker are not yet deployed.
 
 ## Resolved in Production
 

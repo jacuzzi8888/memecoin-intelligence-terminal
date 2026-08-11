@@ -47,6 +47,14 @@ export interface TokenWalletDiscoveryOptions {
   minCandidateScore?: number;
 }
 
+export interface SingleTokenWalletDiscoveryOptions {
+  heliusApiKey: string;
+  tokenAddress: string;
+  transactionsPerToken?: number;
+  walletLimit?: number;
+  minCandidateScore?: number;
+}
+
 export interface TokenWalletDiscoveryResult {
   tokensScanned: number;
   transactionsFetched: number;
@@ -368,6 +376,75 @@ export async function discoverWalletsFromRecentTokens(
     tradesInserted,
     failures,
     candidates: selectedCandidates.map((candidate) => {
+      const result = processed.get(candidate.walletAddress);
+      return {
+        walletAddress: candidate.walletAddress,
+        score: candidate.score,
+        txCount: candidate.txCount,
+        tokenCount: candidate.tokenCount,
+        sources: [...candidate.sources],
+        tokens: [...candidate.tokens],
+        processed: !!result,
+        qualified: result?.qualified ?? null,
+        walletScore: result?.walletScore ?? null,
+        classification: result?.classification ?? null,
+      };
+    }),
+  };
+}
+
+export async function discoverWalletsForToken(
+  options: SingleTokenWalletDiscoveryOptions,
+): Promise<TokenWalletDiscoveryResult> {
+  if (!options.heliusApiKey) throw new Error("HELIUS_API_KEY not set");
+  if (!options.tokenAddress) throw new Error("Token address is required");
+
+  const transactionsPerToken = clampPositiveInteger(options.transactionsPerToken, 100, 100);
+  const walletLimit = clampPositiveInteger(options.walletLimit, 12, 30);
+  const minCandidateScore = options.minCandidateScore ?? 5;
+  const transactions = await fetchTokenTransactions(
+    options.tokenAddress,
+    options.heliusApiKey,
+    transactionsPerToken,
+  );
+  const candidates = [...extractWalletCandidates(options.tokenAddress, transactions).values()]
+    .filter((candidate) => candidate.score >= minCandidateScore)
+    .sort((left, right) => right.score - left.score || right.txCount - left.txCount)
+    .slice(0, walletLimit);
+
+  const processed = new Map<string, WalletPipelineResult>();
+  const failures: Array<{ walletAddress: string; error: string }> = [];
+  let tradesFetched = 0;
+  let tradesInserted = 0;
+  let walletsQualified = 0;
+
+  for (const candidate of candidates) {
+    try {
+      const result = await runWalletIntelligencePipeline(candidate.walletAddress);
+      processed.set(candidate.walletAddress, result);
+      tradesFetched += result.tradesFetched;
+      tradesInserted += result.tradesInserted;
+      if (result.qualified) walletsQualified++;
+      await persistDiscoveryMetadata(candidate, result);
+    } catch (error) {
+      failures.push({
+        walletAddress: candidate.walletAddress,
+        error: error instanceof Error ? error.message : "Unknown wallet discovery error",
+      });
+      await persistDiscoveryMetadata(candidate, null);
+    }
+  }
+
+  return {
+    tokensScanned: 1,
+    transactionsFetched: transactions.length,
+    candidatesFound: candidates.length,
+    walletsProcessed: processed.size,
+    walletsQualified,
+    tradesFetched,
+    tradesInserted,
+    failures,
+    candidates: candidates.map((candidate) => {
       const result = processed.get(candidate.walletAddress);
       return {
         walletAddress: candidate.walletAddress,

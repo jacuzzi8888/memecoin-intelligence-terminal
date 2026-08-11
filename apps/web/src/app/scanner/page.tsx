@@ -71,7 +71,7 @@ interface ScannerItem {
       score: number | null;
       isQualified: boolean;
       tradeType: string;
-      valueUsd: number | null;
+      valueSol: number | null;
       tradedAt: string;
     }>;
   };

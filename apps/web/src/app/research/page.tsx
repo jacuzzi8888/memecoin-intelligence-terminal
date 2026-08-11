@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import {
   ArrowRight,
   BookmarkPlus,
   GitCompareArrows,
+  Network,
   Radar,
   Search,
   ShieldCheck,
@@ -32,6 +34,7 @@ import {
   RefreshButton,
 } from "@/components/workflow-ui";
 import { API_BASE_URL } from "@/lib/api-url";
+import { apiFetch } from "@/lib/api-client";
 
 interface ResearchCandidate {
   id: string;
@@ -61,6 +64,7 @@ function confidenceTone(confidence: number) {
 }
 
 export default function ResearchPage() {
+  const router = useRouter();
   const [candidates, setCandidates] = useState<ResearchCandidate[]>([]);
   const [query, setQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState("all");
@@ -70,6 +74,9 @@ export default function ResearchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [contractAddress, setContractAddress] = useState("");
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
   const load = useCallback(async (quiet = false) => {
@@ -154,6 +161,35 @@ export default function ResearchPage() {
     );
   }
 
+  async function analyzeContract() {
+    const address = contractAddress.trim();
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) {
+      setAnalysisError("Enter a valid Solana contract address.");
+      return;
+    }
+
+    setAnalysisBusy(true);
+    setAnalysisError(null);
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/v1/tokens/${address}/analyze`, {
+        method: "POST",
+      });
+      const payload = await response.json() as { success?: boolean; error?: string };
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Contract analysis could not be queued.");
+      }
+      router.push(`/tokens/${address}?analysis=queued`);
+    } catch (analysisFailure) {
+      setAnalysisError(
+        analysisFailure instanceof Error
+          ? analysisFailure.message
+          : "Contract analysis could not be queued.",
+      );
+    } finally {
+      setAnalysisBusy(false);
+    }
+  }
+
   if (loading && candidates.length === 0) return <LoadingRows rows={6} />;
 
   return (
@@ -188,6 +224,42 @@ export default function ResearchPage() {
           action={<RefreshButton onClick={() => void load()} busy={loading} />}
         />
       ) : null}
+
+      <Panel title="Contract Intelligence" icon={<Network className="h-4 w-4" />}>
+        <div className="grid gap-3 p-standard lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div>
+            <label className="flex h-12 items-center gap-3 rounded-sm border border-outline bg-surface px-4 focus-within:border-primary">
+              <Search className="h-4 w-4 shrink-0 text-primary" />
+              <input
+                value={contractAddress}
+                onChange={(event) => setContractAddress(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void analyzeContract();
+                }}
+                placeholder="Paste a Solana contract address"
+                spellCheck={false}
+                className="w-full bg-transparent font-mono text-sm text-on-surface outline-none placeholder:font-sans placeholder:text-on-surface-variant"
+              />
+            </label>
+            <p className="mt-2 text-xs leading-5 text-on-surface-variant">
+              Index the token, current top holders, observed early buyers, top traders, wallet links,
+              and repeat deployment-circle evidence. Analysis never submits a transaction.
+            </p>
+            {analysisError ? (
+              <p className="mt-2 text-sm text-destructive">{analysisError}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => void analyzeContract()}
+            disabled={analysisBusy}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-sm border border-primary bg-primary/10 px-5 font-mono text-xs uppercase tracking-[0.12em] text-primary transition-colors hover:bg-primary/20 disabled:cursor-wait disabled:opacity-60"
+          >
+            <Network className="h-4 w-4" />
+            {analysisBusy ? "Queuing analysis" : "Analyze contract"}
+          </button>
+        </div>
+      </Panel>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Candidates" value={candidates.length} tone="primary" />

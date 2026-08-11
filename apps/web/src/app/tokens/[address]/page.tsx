@@ -7,13 +7,19 @@ import {
   Activity,
   ArrowUpRight,
   BarChart3,
+  Clock3,
   Flame,
+  GitFork,
   Lock,
+  Network,
+  RefreshCw,
   ShieldCheck,
+  UsersRound,
   Wallet,
   Zap,
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api-url";
+import { apiFetch } from "@/lib/api-client";
 import {
   ErrorState,
   LoadingRows,
@@ -90,7 +96,7 @@ interface TokenPayload {
     tradeType: string;
     amount: number;
     priceUsd: number | null;
-    valueUsd: number | null;
+    valueSol: number | null;
     txSignature: string | null;
     tradedAt: string;
   }>;
@@ -120,6 +126,94 @@ interface TokenPayload {
   dataFreshness: string;
 }
 
+interface AnalysisJob {
+  id: string;
+  status: string;
+  attempts: number;
+  maxAttempts: number;
+  result: unknown;
+  error: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+interface AnalysisWallet {
+  walletId: string;
+  walletAddress: string;
+  classification: string;
+  walletScore: number | null;
+  totalPnlUsd: number | null;
+}
+
+interface TokenGraphPayload {
+  tokenAddress: string;
+  analysisVersion: string | null;
+  analysisJob: AnalysisJob | null;
+  coverage: {
+    holders: string;
+    buyers: string;
+    relationships: string;
+    funding: string;
+  };
+  holders: Array<AnalysisWallet & {
+    rank: number;
+    balance: string;
+    percentage: number | null;
+    source: string;
+    snapshotAt: string;
+  }>;
+  topTraders: Array<AnalysisWallet & {
+    buys: number;
+    sells: number;
+    totalValueSol: number;
+    firstBuyAt: string | null;
+    lastTradeAt: string;
+    delayFromLaunchSeconds: number | null;
+    winRate: number | null;
+  }>;
+  earliestObservedBuyers: Array<AnalysisWallet & {
+    buys: number;
+    sells: number;
+    totalValueSol: number;
+    firstBuyAt: string | null;
+    lastTradeAt: string;
+    delayFromLaunchSeconds: number | null;
+    winRate: number | null;
+  }>;
+  graph: {
+    nodes: Array<{
+      id: string;
+      address: string;
+      label: string | null;
+      classification: string;
+      score: number | null;
+      pnlUsd: number | null;
+      isSeed: boolean;
+    }>;
+    edges: Array<{
+      id: string;
+      source: string;
+      target: string;
+      type: string;
+      confidence: number;
+      evidence: unknown;
+      detectedAt: string;
+    }>;
+  };
+  deploymentCircle: {
+    deployerAddress: string | null;
+    launches: Array<{
+      tokenAddress: string;
+      symbol: string;
+      name: string;
+      launchedAt: string;
+      launchProgram: string | null;
+    }>;
+    repeatEarlyBuyerCount: number;
+  };
+}
+
 function chartPath(points: TokenPayload["chart"]) {
   const values = points.map((point) => point.priceUsd).filter((value) => value > 0);
   if (values.length < 2) return null;
@@ -137,39 +231,185 @@ function chartPath(points: TokenPayload["chart"]) {
     .join(" ");
 }
 
+function RelationshipMap({ graph }: { graph: TokenGraphPayload["graph"] }) {
+  const nodes = graph.nodes.slice(0, 14);
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
+  const positions = new Map(nodes.map((node, index) => {
+    const angle = (index / Math.max(nodes.length, 1)) * Math.PI * 2 - Math.PI / 2;
+    const radius = node.isSeed ? 128 : 162;
+    return [node.id, {
+      x: 260 + Math.cos(angle) * radius,
+      y: 190 + Math.sin(angle) * (radius * 0.72),
+    }] as const;
+  }));
+
+  if (nodes.length === 0) {
+    return (
+      <div className="flex min-h-64 items-center justify-center p-standard text-center text-sm text-on-surface-variant">
+        No relationship evidence has been persisted for these wallets yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-sm border border-outline bg-surface">
+      <svg viewBox="0 0 520 380" className="h-auto min-h-72 w-full" role="img" aria-label="Wallet relationship map">
+        <defs>
+          <pattern id="graph-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" />
+          </pattern>
+        </defs>
+        <rect width="520" height="380" fill="url(#graph-grid)" className="text-on-surface-variant" />
+        {edges.map((edge) => {
+          const source = positions.get(edge.source);
+          const target = positions.get(edge.target);
+          if (!source || !target) return null;
+          return (
+            <line
+              key={edge.id}
+              x1={source.x}
+              y1={source.y}
+              x2={target.x}
+              y2={target.y}
+              stroke="currentColor"
+              strokeOpacity={Math.max(0.28, edge.confidence)}
+              strokeWidth={edge.type === "deployer_circle" ? 2.5 : 1.5}
+              strokeDasharray={edge.type === "co_entry" ? "5 4" : undefined}
+              className={edge.type === "deployer_circle" ? "text-warning" : "text-primary"}
+            />
+          );
+        })}
+        {nodes.map((node) => {
+          const position = positions.get(node.id)!;
+          return (
+            <g key={node.id} transform={`translate(${position.x} ${position.y})`}>
+              <circle
+                r={node.isSeed ? 24 : 19}
+                className={node.isSeed ? "fill-primary/20 stroke-primary" : "fill-surface-high stroke-outline"}
+                strokeWidth="2"
+              />
+              <text y="4" textAnchor="middle" className="fill-on-surface font-mono text-[9px]">
+                {node.score ?? "--"}
+              </text>
+              <text y={node.isSeed ? 40 : 34} textAnchor="middle" className="fill-on-surface-variant font-mono text-[9px]">
+                {shortAddress(node.address)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export default function TokenPage() {
   const params = useParams();
   const address = params.address as string;
   const [data, setData] = useState<TokenPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [graphData, setGraphData] = useState<TokenGraphPayload | null>(null);
+  const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisRefresh, setAnalysisRefresh] = useState(0);
 
   useEffect(() => {
-    async function fetchToken() {
-      setLoading(true);
-      setError(null);
+    let timer: number | null = null;
+    let cancelled = false;
+
+    async function fetchToken(quiet = false) {
+      if (!quiet) setLoading(true);
       try {
         const apiUrl = API_BASE_URL;
-        const res = await fetch(`${apiUrl}/api/v1/tokens/${address}`, { cache: "no-store" });
-        const json: { success?: boolean; data?: TokenPayload; error?: string } = await res.json();
-        if (json.success && json.data) {
-          setData(json.data);
-        } else {
+        const [tokenResponse, graphResponse, statusResponse] = await Promise.all([
+          fetch(`${apiUrl}/api/v1/tokens/${address}`, { cache: "no-store" }),
+          fetch(`${apiUrl}/api/v1/tokens/${address}/graph`, { cache: "no-store" }),
+          fetch(`${apiUrl}/api/v1/tokens/${address}/analysis`, { cache: "no-store" }),
+        ]);
+        const tokenJson = await tokenResponse.json() as { success?: boolean; data?: TokenPayload; error?: string };
+        const graphJson = await graphResponse.json() as { success?: boolean; data?: TokenGraphPayload; error?: string };
+        const statusJson = await statusResponse.json() as {
+          success?: boolean;
+          data?: { tokenIndexed: boolean; job: AnalysisJob | null };
+        };
+        if (cancelled) return;
+
+        const job = statusJson.data?.job ?? graphJson.data?.analysisJob ?? null;
+        setAnalysisJob(job);
+        if (tokenJson.success && tokenJson.data) {
+          setData(tokenJson.data);
+          setError(null);
+        } else if (!job || !["pending", "running", "retrying"].includes(job.status)) {
           setData(null);
-          setError(json.error ?? "Token research data is unavailable.");
+          setError(tokenJson.error ?? "Token research data is unavailable.");
+        }
+        if (graphJson.success && graphJson.data) {
+          setGraphData(graphJson.data);
+          setAnalysisError(null);
+        } else if (graphResponse.status !== 404) {
+          setAnalysisError(graphJson.error ?? "Contract graph data is unavailable.");
+        }
+
+        if (job && ["pending", "running", "retrying"].includes(job.status)) {
+          timer = window.setTimeout(() => void fetchToken(true), 3_000);
         }
       } catch {
-        setData(null);
-        setError("Unable to reach token research API.");
+        if (!cancelled) setError("Unable to reach token research API.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    fetchToken();
-  }, [address]);
+    void fetchToken();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [address, analysisRefresh]);
+
+  async function requestAnalysis() {
+    setAnalysisBusy(true);
+    setAnalysisError(null);
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/api/v1/tokens/${address}/analyze`, {
+        method: "POST",
+      });
+      const payload = await response.json() as { success?: boolean; error?: string };
+      if (!response.ok || !payload.success) throw new Error(payload.error || "Analysis could not be queued.");
+      setAnalysisRefresh((current) => current + 1);
+    } catch (requestError) {
+      setAnalysisError(requestError instanceof Error ? requestError.message : "Analysis could not be queued.");
+    } finally {
+      setAnalysisBusy(false);
+    }
+  }
 
   if (loading) return <LoadingRows rows={5} />;
+
+  const analysisPending = analysisJob && ["pending", "running", "retrying"].includes(analysisJob.status);
+
+  if (!data && analysisPending) {
+    return (
+      <div className="space-y-4">
+        <ModuleNotice
+          tone="primary"
+          title="Contract analysis running"
+          message="The indexer is resolving token metadata, holders, observed buyers, trader history, and wallet relationships. This page refreshes automatically."
+        />
+        <Panel title="Requested Contract" icon={<Network className="h-4 w-4" />}>
+          <div className="space-y-3 p-standard">
+            <p className="break-all font-mono text-sm text-on-surface">{address}</p>
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge tone="primary">{analysisJob?.status}</StatusBadge>
+              <StatusBadge tone="default">Attempt {analysisJob?.attempts ?? 0}/{analysisJob?.maxAttempts ?? 2}</StatusBadge>
+            </div>
+          </div>
+        </Panel>
+      </div>
+    );
+  }
 
   if (error || !data) {
     return (
@@ -411,7 +651,210 @@ export default function TokenPage() {
           )}
         </div>
 
-        <Panel title="Wallet Evidence" icon={<Wallet className="h-4 w-4" />}>
+        <Panel
+          title="Contract Intelligence Coverage"
+          icon={<Network className="h-4 w-4" />}
+          action={
+            <button
+              type="button"
+              onClick={() => void requestAnalysis()}
+              disabled={analysisBusy || Boolean(analysisPending)}
+              className="inline-flex h-8 items-center gap-2 rounded-sm border border-outline bg-surface px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${analysisBusy || analysisPending ? "animate-spin" : ""}`} />
+              {analysisPending ? "Analyzing" : "Refresh analysis"}
+            </button>
+          }
+        >
+          <div className="space-y-3 p-standard">
+            {analysisError ? (
+              <ModuleNotice tone="warning" title="Analysis degraded" message={analysisError} />
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Holder Snapshot"
+                value={graphData?.holders.length ?? 0}
+                detail={graphData?.coverage.holders.replaceAll("_", " ") ?? "Not analyzed"}
+                tone={graphData?.holders.length ? "primary" : "default"}
+              />
+              <MetricCard
+                label="Observed Buyers"
+                value={graphData?.earliestObservedBuyers.length ?? 0}
+                detail={graphData?.coverage.buyers.replaceAll("_", " ") ?? "Not analyzed"}
+                tone={graphData?.earliestObservedBuyers.length ? "success" : "default"}
+              />
+              <MetricCard
+                label="Graph Links"
+                value={graphData?.graph.edges.length ?? 0}
+                detail={graphData?.coverage.relationships.replaceAll("_", " ") ?? "Not analyzed"}
+                tone={graphData?.graph.edges.length ? "warning" : "default"}
+              />
+              <MetricCard
+                label="Funding Paths"
+                value={graphData?.coverage.funding === "unavailable" ? "Unavailable" : graphData?.coverage.funding ?? "Unavailable"}
+                detail="Never inferred from co-entry"
+                tone="stale"
+              />
+            </div>
+            <p className="text-xs leading-5 text-on-surface-variant">
+              Holder ranks are current snapshots. Buyer ordering is the earliest activity captured by
+              indexed wallet history, not a claim of complete genesis coverage. Co-entry is behavioral
+              evidence and does not prove common ownership.
+            </p>
+          </div>
+        </Panel>
+
+        <div className="grid min-w-0 gap-4 2xl:grid-cols-2">
+          <Panel title="Top Current Holders" icon={<UsersRound className="h-4 w-4" />}>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead className="border-b border-outline bg-surface font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                  <tr>
+                    <th className="px-3 py-3 text-left font-medium">Rank / Wallet</th>
+                    <th className="px-3 py-3 text-right font-medium">Supply</th>
+                    <th className="px-3 py-3 text-right font-medium">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline bg-surface">
+                  {graphData?.holders.length ? graphData.holders.slice(0, 12).map((holder) => (
+                    <tr key={`${holder.snapshotAt}-${holder.walletId}`} className="hover:bg-surface-high">
+                      <td className="px-3 py-3">
+                        <Link href={`/wallets?address=${holder.walletAddress}`} className="font-mono text-primary hover:underline">
+                          #{holder.rank} {shortAddress(holder.walletAddress)}
+                        </Link>
+                        <p className="mt-1 text-xs text-on-surface-variant">{holder.classification}</p>
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-on-surface">
+                        {holder.percentage === null ? "--" : `${formatNumber(holder.percentage)}%`}
+                      </td>
+                      <td className={`px-3 py-3 text-right font-mono ${scoreTone(holder.walletScore)}`}>
+                        {holder.walletScore ?? "--"}
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={3} className="px-3 py-8 text-center text-sm text-on-surface-variant">No holder snapshot available.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
+          <Panel title="Earliest Observed Buyers" icon={<Clock3 className="h-4 w-4" />}>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead className="border-b border-outline bg-surface font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                  <tr>
+                    <th className="px-3 py-3 text-left font-medium">Wallet</th>
+                    <th className="px-3 py-3 text-right font-medium">Entry</th>
+                    <th className="px-3 py-3 text-right font-medium">Flow</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline bg-surface">
+                  {graphData?.earliestObservedBuyers.length ? graphData.earliestObservedBuyers.slice(0, 12).map((buyer, index) => (
+                    <tr key={buyer.walletId} className="hover:bg-surface-high">
+                      <td className="px-3 py-3">
+                        <Link href={`/wallets?address=${buyer.walletAddress}`} className="font-mono text-primary hover:underline">
+                          #{index + 1} {shortAddress(buyer.walletAddress)}
+                        </Link>
+                        <p className="mt-1 text-xs text-on-surface-variant">{buyer.classification}</p>
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-on-surface">
+                        {buyer.delayFromLaunchSeconds === null ? formatRelative(buyer.firstBuyAt) : `+${buyer.delayFromLaunchSeconds}s`}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-on-surface">
+                        {formatNumber(buyer.totalValueSol)} SOL
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={3} className="px-3 py-8 text-center text-sm text-on-surface-variant">No indexed buyer history available.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+
+        <Panel title="Top Observed Traders" icon={<Wallet className="h-4 w-4" />}>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead className="border-b border-outline bg-surface font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">
+                <tr>
+                  <th className="px-standard py-3 text-left font-medium">Wallet</th>
+                  <th className="px-standard py-3 text-right font-medium">Score</th>
+                  <th className="px-standard py-3 text-right font-medium">Buys / Sells</th>
+                  <th className="px-standard py-3 text-right font-medium">Observed SOL</th>
+                  <th className="px-standard py-3 text-right font-medium">Tracked PnL</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline bg-surface">
+                {graphData?.topTraders.length ? graphData.topTraders.slice(0, 15).map((trader) => (
+                  <tr key={trader.walletId} className="hover:bg-surface-high">
+                    <td className="px-standard py-3">
+                      <Link href={`/wallets?address=${trader.walletAddress}`} className="font-mono text-primary hover:underline">
+                        {shortAddress(trader.walletAddress)}
+                      </Link>
+                      <p className="mt-1 text-xs text-on-surface-variant">{trader.classification}</p>
+                    </td>
+                    <td className={`px-standard py-3 text-right font-mono ${scoreTone(trader.walletScore)}`}>{trader.walletScore ?? "--"}</td>
+                    <td className="px-standard py-3 text-right font-mono text-on-surface">{trader.buys} / {trader.sells}</td>
+                    <td className="px-standard py-3 text-right font-mono text-on-surface">{formatNumber(trader.totalValueSol)} SOL</td>
+                    <td className={`px-standard py-3 text-right font-mono ${(trader.totalPnlUsd ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>{formatUsd(trader.totalPnlUsd)}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={5} className="px-standard py-8 text-center text-sm text-on-surface-variant">No trader history available.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+
+        <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
+          <Panel title="Wallet Relationship Map" icon={<GitFork className="h-4 w-4" />}>
+            <div className="space-y-3 p-standard">
+              <RelationshipMap graph={graphData?.graph ?? { nodes: [], edges: [] }} />
+              <div className="flex flex-wrap gap-2">
+                <StatusBadge tone="primary">Dashed: same-token co-entry</StatusBadge>
+                <StatusBadge tone="warning">Amber: deployer circle</StatusBadge>
+                <StatusBadge tone="default">Two-hop expansion</StatusBadge>
+              </div>
+              {graphData?.graph.edges.slice(0, 8).map((edge) => (
+                <div key={edge.id} className="flex flex-col gap-1 rounded-sm border border-outline bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="font-mono text-xs uppercase tracking-[0.08em] text-on-surface">{edge.type.replaceAll("_", " ")}</span>
+                  <span className="font-mono text-xs text-on-surface-variant">{Math.round(edge.confidence * 100)}% evidence confidence</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Deployment Circle" icon={<Network className="h-4 w-4" />}>
+            <div className="space-y-3 p-standard">
+              <div className="rounded-sm border border-outline bg-surface px-3 py-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-on-surface-variant">Deployer</p>
+                <p className="mt-2 break-all font-mono text-sm text-primary">{graphData?.deploymentCircle.deployerAddress ?? "Unresolved"}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <MetricCard label="Known Launches" value={graphData?.deploymentCircle.launches.length ?? 0} tone="primary" />
+                <MetricCard label="Repeat Buyers" value={graphData?.deploymentCircle.repeatEarlyBuyerCount ?? 0} tone="warning" />
+              </div>
+              <div className="space-y-2">
+                {graphData?.deploymentCircle.launches.slice(0, 8).map((item) => (
+                  <Link key={`${item.tokenAddress}-${item.launchedAt}`} href={`/tokens/${item.tokenAddress}`} className="block rounded-sm border border-outline bg-surface px-3 py-2 transition-colors hover:border-primary">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-mono text-sm text-on-surface">{item.symbol}</span>
+                      <span className="font-mono text-[10px] text-on-surface-variant">{formatRelative(item.launchedAt)}</span>
+                    </div>
+                    <p className="mt-1 truncate text-xs text-on-surface-variant">{shortAddress(item.tokenAddress)}</p>
+                  </Link>
+                ))}
+                {!graphData?.deploymentCircle.launches.length ? (
+                  <p className="rounded-sm border border-outline bg-surface px-3 py-6 text-center text-sm text-on-surface-variant">No repeat deployer history is indexed.</p>
+                ) : null}
+              </div>
+            </div>
+          </Panel>
+        </div>
+
+        <Panel title="Recent Wallet Transactions" icon={<Wallet className="h-4 w-4" />}>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead className="border-b border-outline bg-surface font-mono text-[11px] uppercase tracking-[0.12em] text-on-surface-variant">
@@ -420,7 +863,7 @@ export default function TokenPage() {
                   <th className="px-standard py-3 text-left font-medium">Wallet Entity</th>
                   <th className="px-standard py-3 text-right font-medium">Score</th>
                   <th className="px-standard py-3 text-right font-medium">Net Flow</th>
-                  <th className="px-standard py-3 text-right font-medium">Value</th>
+                      <th className="px-standard py-3 text-right font-medium">Native Flow</th>
                   <th className="px-standard py-3 text-right font-medium">Pnl</th>
                 </tr>
               </thead>
@@ -458,7 +901,7 @@ export default function TokenPage() {
                         {trade.tradeType} {formatCompact(trade.amount)}
                       </td>
                       <td className="px-standard py-3 text-right font-mono text-on-surface">
-                        {formatUsd(trade.valueUsd)}
+                        {trade.valueSol === null ? "n/a" : `${formatNumber(trade.valueSol)} SOL`}
                       </td>
                       <td
                         className={`px-standard py-3 text-right font-mono ${(trade.totalPnlUsd ?? 0) >= 0 ? "text-success" : "text-destructive"}`}

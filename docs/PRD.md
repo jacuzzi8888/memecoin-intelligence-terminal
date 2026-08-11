@@ -41,10 +41,14 @@ Token event detected
 ### 2. Token Research
 ```
 User enters token address or clicks from alert
+-> Queue on-demand indexing when the contract is not already known
 -> Display token identity, market data, launch info
 -> Show intelligence score with factor breakdown
 -> Display risk assessment
 -> Show qualified wallet activity
+-> Rank current holders, earliest observed buyers, and top observed traders
+-> Show direct and second-degree wallet links with evidence and confidence
+-> Show repeat launches and recurring early buyers for the same deployer
 -> Provide timeline of key events
 -> Offer trading action (if terminal enabled)
 ```
@@ -77,12 +81,18 @@ User creates or edits strategy
 - System shall calculate token risk scores with versioned rulesets
 - System shall store raw events with provider provenance
 - System shall derive intelligence from normalized facts
+- System shall accept a Solana contract address as an on-demand analysis entry point
+- System shall snapshot and rank current token holders with source and freshness
+- System shall label incomplete buyer history as earliest observed rather than earliest definitive
+- System shall expose repeat deployer and recurring buyer evidence without initiating transactions
 
 ### FR-2: Wallet Intelligence
 - System shall track qualified wallet performance
 - System shall classify wallets (bot, insider, bundler, farm, legitimate)
 - System shall calculate wallet scores with versioned rulesets
 - System shall detect wallet clusters and funding relationships
+- System shall attach relationship type, source, confidence, timestamps, and supporting transactions or tokens
+- System shall distinguish behavioral co-entry from direct funding evidence
 
 ### FR-3: Signal Generation
 - System shall evaluate strategies against token events

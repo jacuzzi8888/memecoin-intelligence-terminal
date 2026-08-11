@@ -87,7 +87,11 @@ export const walletRelationships = pgTable("wallet_relationships", {
   confidence: numeric("confidence", { precision: 5, scale: 4 }).notNull(),
   evidence: jsonb("evidence").default("{}").notNull(),
   detectedAt: timestamp("detected_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => ({
+  walletARelationshipIdx: index("wallet_relationships_wallet_a_idx").on(table.walletAId, table.detectedAt),
+  walletBRelationshipIdx: index("wallet_relationships_wallet_b_idx").on(table.walletBId, table.detectedAt),
+  relationshipTypeIdx: index("wallet_relationships_type_idx").on(table.relationshipType, table.detectedAt),
+}));
 
 export const walletCohortDefinitions = pgTable("wallet_cohort_definitions", {
   id: text("id").primaryKey(),

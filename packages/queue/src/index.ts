@@ -37,6 +37,11 @@ export interface WalletSyncJobData {
   trigger: "api" | "scheduler" | "recovery";
 }
 
+export interface TokenAnalysisJobData {
+  tokenAddress: string;
+  trigger: "api" | "scanner" | "recovery";
+}
+
 export interface DeadLetterJobData<T = unknown> {
   sourceQueue: string;
   jobId: string | null;
@@ -49,10 +54,12 @@ export interface DeadLetterJobData<T = unknown> {
 export const RAW_EVENT_PROCESSING_QUEUE = "raw-event-processing";
 export const ALERT_DELIVERY_QUEUE = "alert-delivery";
 export const WALLET_SYNC_QUEUE = "wallet-sync";
+export const TOKEN_ANALYSIS_QUEUE = "token-analysis";
 
 let _rawEventProcessingQueue: Queue<RawEventProcessingJobData> | null = null;
 let _alertDeliveryQueue: Queue<AlertDeliveryJobData> | null = null;
 let _walletSyncQueue: Queue<WalletSyncJobData> | null = null;
+let _tokenAnalysisQueue: Queue<TokenAnalysisJobData> | null = null;
 const _deadLetterQueues = new Map<string, Queue<DeadLetterJobData>>();
 
 export function createQueue<T = unknown>(config: QueueConfig): Queue<T> {
@@ -100,6 +107,20 @@ export function createWalletSyncQueue(): Queue<WalletSyncJobData> {
   }
 
   return _walletSyncQueue;
+}
+
+export function createTokenAnalysisQueue(): Queue<TokenAnalysisJobData> {
+  if (!_tokenAnalysisQueue) {
+    _tokenAnalysisQueue = createQueue<TokenAnalysisJobData>({
+      name: TOKEN_ANALYSIS_QUEUE,
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: "exponential", delay: 2_000 },
+      },
+    });
+  }
+
+  return _tokenAnalysisQueue;
 }
 
 export function getDeadLetterQueueName(queueName: string) {
@@ -239,6 +260,11 @@ export async function closeAll(): Promise<void> {
   if (_walletSyncQueue) {
     await _walletSyncQueue.close();
     _walletSyncQueue = null;
+  }
+
+  if (_tokenAnalysisQueue) {
+    await _tokenAnalysisQueue.close();
+    _tokenAnalysisQueue = null;
   }
 
   for (const queue of _deadLetterQueues.values()) {

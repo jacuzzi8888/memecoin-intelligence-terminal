@@ -270,6 +270,11 @@ The final research direction is represented by the `token_research_wif_desktop` 
 - factor cards for explainability
 - stale/degraded module treatment inside the evidence stack
 - wallet evidence table
+- contract-address analyzer as the primary direct investigation entry
+- separate tables for current holders, earliest observed buyers, and top observed traders
+- relationship map with evidence types, confidence, and two-hop expansion
+- deployment-circle module for repeat launches and recurring early buyers
+- explicit coverage cards that distinguish unavailable funding evidence from behavioral links
 - integrated execution panel on the right
 
 This page defines the research-to-decision posture until the Phase 3 evidence gate passes.

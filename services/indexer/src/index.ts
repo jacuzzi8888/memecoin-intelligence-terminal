@@ -12,6 +12,7 @@ import { createTokenDiscoveryRepository, discoverTokens } from "./discovery/disc
 import { discoverWalletsFromRecentTokens } from "./token-wallet-discovery.js";
 import { backfillSignalScores } from "./signal-score-backfill.js";
 import { backfillAlertOutcomes } from "./alert-outcomes.js";
+import { runTokenAnalysisService } from "./token-analysis-service.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
@@ -32,7 +33,14 @@ export {
 } from "./discovery/discover-tokens.js";
 export {
   discoverWalletsFromRecentTokens,
+  discoverWalletsForToken,
 } from "./token-wallet-discovery.js";
+export {
+  enqueueTokenAnalysisJob,
+  getLatestTokenAnalysisJob,
+  runTokenAnalysisService,
+} from "./token-analysis-service.js";
+export { isValidTokenAddress, runTokenAnalysisPipeline } from "./token-analysis.js";
 export {
   backfillAlertOutcomes,
   getAlertOutcomeSummary,
@@ -117,6 +125,7 @@ export async function runIndexerService() {
   }
   const alertsWorker = embedAlerts ? await runAlertsService() : null;
   const walletWorker = await runWalletSyncService();
+  const tokenAnalysisWorker = await runTokenAnalysisService();
   let walletTimer: NodeJS.Timeout | null = null;
   let walletDiscoveryTimer: NodeJS.Timeout | null = null;
   let discoveryTimer: NodeJS.Timeout | null = null;
@@ -248,6 +257,7 @@ export async function runIndexerService() {
       outcomeTimer = null;
     }
     if (alertsWorker) await alertsWorker.close();
+    await tokenAnalysisWorker.close();
     await walletWorker.close();
   };
 

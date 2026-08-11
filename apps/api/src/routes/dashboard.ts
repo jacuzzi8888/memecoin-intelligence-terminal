@@ -130,7 +130,7 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
         tokenAddress: schema.walletTrades.tokenAddress,
         tradeType: schema.walletTrades.tradeType,
         amount: schema.walletTrades.amount,
-        valueUsd: schema.walletTrades.valueUsd,
+        valueSol: schema.walletTrades.valueUsd,
         tradedAt: schema.walletTrades.tradedAt,
         tokenSymbol: schema.tokens.symbol,
       })
@@ -254,7 +254,7 @@ export const dashboardRoute: FastifyPluginAsync = async (app) => {
           tokenSymbol: trade.tokenSymbol || trade.tokenAddress.slice(0, 6),
           tradeType: trade.tradeType,
           amount: trade.amount,
-          valueUsd: trade.valueUsd,
+          valueSol: trade.valueSol,
           tradedAt: trade.tradedAt.toISOString(),
         })),
         dataWindow: serializeRecentWindow(since),

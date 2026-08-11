@@ -58,11 +58,18 @@ Phase 3 is the final phase. All intelligence, evidence, reliability, and product
 
 ## Phase 2.7: Coverage and Operator Value
 
-**Status**: Next after production rollout
+**Status**: In progress in the workspace
 
 - [ ] Measure what percentage of daily launches each discovery source captures
 - [ ] Add a broader free launch source or reliable Helius launch parser if coverage is insufficient
 - [ ] Increase qualified-wallet evidence coverage and expose wallet cohort reasoning
+- [x] Add queued contract-address analysis for unknown and indexed tokens
+- [x] Persist current top-holder snapshots with source and freshness
+- [x] Expose top traders and earliest observed buyers without claiming complete genesis coverage
+- [x] Persist same-token co-entry, repeat co-entry, and repeat-deployer-circle relationships
+- [x] Add a two-hop wallet graph and deployment-circle dossier
+- [ ] Trace direct SOL funding sources and shared funders with transaction-level evidence
+- [ ] Deploy migration `0005` and verify the analysis worker against production providers
 - [ ] Add provider health history, ingestion lag, and per-source failure telemetry
 - [ ] Add saved scanner views and watchlist-to-alert workflows
 - [ ] Add repeatable browser tests for mobile, filters, unlock, and degraded states
