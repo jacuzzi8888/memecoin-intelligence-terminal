@@ -1,8 +1,8 @@
 # Current State
 
-**Last Updated**: 2026-08-10
+**Last Updated**: 2026-08-11
 **Current Phase**: Phase 2.7, operator value and contract intelligence
-**Deployment State**: Live. The web app runs on Vercel and the API, indexer, PostgreSQL, and Redis run on Railway under the `jacuzzi8888` project accounts. Migration `0004`, personal write access, embedded workers, and 15-second discovery are active in production.
+**Deployment State**: Live. The web app runs on Vercel and the API, indexer, PostgreSQL, and Redis run on Railway under the `jacuzzi8888` project accounts. Migrations `0004` and `0005`, personal write access, embedded workers, and 15-second discovery are active in production.
 
 ## Production Endpoints
 
@@ -19,7 +19,7 @@
 - Scanner filters support timeframe, liquidity, market cap, volume, pair age, source, discovery source, priority, wallet evidence, qualified wallets, bundler exclusion, score, and text search.
 - Wallet Intelligence filters the discovered wallet set by score band, PnL band, and legitimacy, with score, PnL, win-rate, and recency ranking.
 - Research is an evidence workbench backed by current scanner observations, not a placeholder.
-- The workspace adds queued contract-address analysis with current holder snapshots, observed early-buyer ordering, top-trader ranking, two-hop wallet relationships, and repeat deployer-circle evidence. This change is not yet deployed.
+- The deployed workspace adds queued contract-address analysis with current holder snapshots, observed early-buyer ordering, top-trader ranking, two-hop wallet relationships, and repeat deployer-circle evidence. Coverage is labeled per evidence source and does not imply complete genesis history or funding proof.
 - Dashboard, scanner, research, token, wallet, alert, watchlist, strategy, terminal, and settings surfaces now form one deep-linked investigation workflow instead of isolated pages.
 - The dashboard prioritizes operator queues and verified evidence; the previous decorative chart has been removed.
 - Scanner live refresh can be paused, saved views can be restored, result totals and pagination are explicit, and refresh failures retain the last verified ranking.
@@ -41,11 +41,12 @@
 
 - Fastify API, PostgreSQL, Redis/BullMQ, indexer, processor, wallet worker, token-analysis worker, and alert worker are implemented.
 - The always-on indexer can embed the processor and alert consumer for a low-cost single-service deployment.
+- Production wallet-sync and wallet-discovery automation are paused while free-provider capacity is reserved for live market discovery and targeted contract analysis; manual sync and CA analysis remain available.
 - DexScreener discovery lists are cached with stale fallback and automatic `429` backoff. Token pair lookups are deduplicated and batched in groups of 30.
 - Alert delivery performs a recovery pass on startup, consumes queue jobs, and records delivered, skipped, or failed destinations.
 - Alert outcome backfill runs every 15 minutes by default.
 - API status reports data freshness, pending alerts, queue depth, dead letters, and persisted entity counts.
-- Migration `0005_fantastic_avengers.sql` adds append-only token-holder snapshots and wallet-relationship indexes. It remains pending in production.
+- Migration `0005_fantastic_avengers.sql` adds append-only token-holder snapshots and wallet-relationship indexes and is applied in production.
 - Database migration `0004_sudden_baron_zemo.sql` adds query indexes, the market observation strategy, corrected strategy configs, and supersedes invalid legacy alerts.
 - The container runs as a non-root user and supports `api`, `indexer`, `processor`, and `alerts` roles.
 
@@ -61,7 +62,7 @@
 ## Data Sources
 
 - DexScreener provides current profiles, boosts, pair metadata, and fallback market data.
-- Helius provides Solana RPC, token metadata, holder samples, stream events, and wallet history when configured and available.
+- Helius provides token metadata, stream events, and wallet history when configured and available. Current holder ranking uses a paced public Solana RPC fallback, with a public mainnet RPC batch for supply and owner resolution.
 - Birdeye enriches market data when a key is configured.
 - The current free discovery set is not a complete firehose of every Solana token launch. Coverage must be measured rather than inferred from poll frequency.
 
@@ -79,7 +80,7 @@ Verified in the current workspace:
 - Optimized Next.js production build for all 13 routes
 - CI workflow for frozen install, lint, typecheck, unit tests, and web build
 
-Verified in production on 2026-08-10:
+Verified in production on 2026-08-11:
 
 - Railway API health returned PostgreSQL and Redis `up`.
 - Six consecutive indexer passes processed 57 live events each with zero rate-limit, batch-failure, or error-level log events.
@@ -93,13 +94,15 @@ Verified in production on 2026-08-10:
 - Wallet PnL filtering returned 109 profitable wallets from 374 persisted wallets at verification time.
 - Terminal rendered fresh market snapshots and its Phase 3 readiness gate while exposing zero Buy or Sell controls.
 - Local responsive browser verification confirmed keyboard access to all seven timeframe options, persistent degraded-state controls, visible mobile navigation, and no page-level scanner overflow.
+- The production CA-analysis job completed for `8Fs2YLsayR4awLB79nMM3QCpG3pqvcAGP7hHb8fX4L2G`: 20 holders, 22 observed traders, 20 earliest observed buyers, and 24 graph nodes. Coverage reported `top_20`, `indexed_and_observed`, `no_relationships_observed`, and `unavailable` for funding.
+- The Vercel token dossier rendered the same live evidence, custom Aegis UI, holder links, buyer ordering, graph map, and Phase 3 execution lock with HTTP 200 and no visible application error.
 
 ## Remaining Gates
 
 - Enter the saved personal key in Settings for each browser that will perform mutations; read-only market data remains public.
-- Review and retry or supersede the existing wallet-sync dead letters after confirming their provider failure causes.
+- Review and retry or supersede the existing wallet-sync dead letters after confirming their provider failure causes; scheduled wallet sync/discovery is intentionally paused until provider capacity is available.
 - Accumulate enough fresh wallet-enriched snapshots and reviewed alert outcomes to evaluate strategy edge.
-- Deploy migration `0005`, the token-analysis worker, API routes, and contract-intelligence UI, then verify one fresh and one previously indexed contract end to end.
+- Verify contract analysis across additional fresh and previously indexed contracts, including provider-failure and partial-coverage cases.
 - Implement direct funding-source evidence. Co-entry and repeat-deployer links are useful behavioral evidence but are not funding proof.
 - Improve launch coverage beyond DexScreener profiles/boosts if near-firehose coverage is required.
 - Add repeatable browser tests for the core investigation flow, responsive layouts, write unlock, and degraded-data retention.

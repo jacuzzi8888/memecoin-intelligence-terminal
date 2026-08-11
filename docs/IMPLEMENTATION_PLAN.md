@@ -22,7 +22,7 @@ Phase 3 is the final phase. All intelligence, evidence, reliability, and product
 
 ## Phase 2.5: Reliability and Signal Integrity
 
-**Status**: Implementation complete; production rollout pending
+**Status**: Production rollout complete; seven-day measurement pending
 
 - [x] Non-saturated signed scoring
 - [x] Unknown risk for incomplete evidence
@@ -38,7 +38,7 @@ Phase 3 is the final phase. All intelligence, evidence, reliability, and product
 - [x] Embedded alert delivery consumer and recovery pass
 - [x] Scheduled alert outcome backfill
 - [x] CI workflow and frontend unit coverage
-- [ ] Deploy, migrate, and verify the updated production stack
+- [x] Deploy, migrate, and verify the updated production stack
 - [ ] Measure provider coverage, quotas, freshness, and failure rates for at least seven continuous days
 
 ## Phase 2.6: Evidence and Strategy Proof
@@ -58,7 +58,7 @@ Phase 3 is the final phase. All intelligence, evidence, reliability, and product
 
 ## Phase 2.7: Coverage and Operator Value
 
-**Status**: In progress in the workspace
+**Status**: Core analysis deployed; coverage and edge validation in progress
 
 - [ ] Measure what percentage of daily launches each discovery source captures
 - [ ] Add a broader free launch source or reliable Helius launch parser if coverage is insufficient
@@ -69,7 +69,7 @@ Phase 3 is the final phase. All intelligence, evidence, reliability, and product
 - [x] Persist same-token co-entry, repeat co-entry, and repeat-deployer-circle relationships
 - [x] Add a two-hop wallet graph and deployment-circle dossier
 - [ ] Trace direct SOL funding sources and shared funders with transaction-level evidence
-- [ ] Deploy migration `0005` and verify the analysis worker against production providers
+- [x] Deploy migration `0005` and verify the analysis worker against production providers
 - [ ] Add provider health history, ingestion lag, and per-source failure telemetry
 - [ ] Add saved scanner views and watchlist-to-alert workflows
 - [ ] Add repeatable browser tests for mobile, filters, unlock, and degraded states

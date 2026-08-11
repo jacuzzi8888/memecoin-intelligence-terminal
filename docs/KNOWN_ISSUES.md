@@ -26,7 +26,7 @@ Telegram and Discord delivery code is implemented, but real delivery requires a 
 ### KI-006: Provider quality depends on credentials and quotas
 
 **Severity**: Medium
-Helius and Birdeye improve metadata, holders, RPC reliability, and wallet history. Missing keys, free-tier quotas, or provider errors reduce evidence coverage. DexScreener remains the free fallback.
+Helius and Birdeye improve metadata and wallet history. Missing keys, free-tier quotas, or provider errors reduce evidence coverage. Holder ranking has a public Solana RPC fallback, while historical buyers and wallet backfills remain quota-sensitive. DexScreener remains the free market-data fallback.
 
 ### KI-007: API hot-path caching is not yet measured
 
@@ -51,7 +51,12 @@ The production wallet queue contains failed jobs from provider-limited sync atte
 ### KI-011: Funding relationships are not yet available
 
 **Severity**: High
-The workspace now persists evidence-backed same-token co-entry, repeat co-entry, and repeat-deployer-circle relationships and exposes a two-hop graph. Direct SOL funding sources and shared-funder links are still unavailable. The UI explicitly labels funding coverage as unavailable and must not treat behavioral co-entry as proof of common control. Migration `0005` and the token-analysis worker are not yet deployed.
+The workspace now persists evidence-backed same-token co-entry, repeat co-entry, and repeat-deployer-circle relationships and exposes a two-hop graph. Direct SOL funding sources and shared-funder links are still unavailable. The UI explicitly labels funding coverage as unavailable and must not treat behavioral co-entry as proof of common control. Migration `0005` and the token-analysis worker are deployed; funding evidence remains a Phase 2.7 gap.
+
+### KI-012: Historical buyer completeness is bounded
+
+**Severity**: High
+Contract analysis reports earliest observed buyers from indexed wallet history, not guaranteed genesis buyers. Current holder snapshots cover the top 20 accounts, and a contract can legitimately have zero relationship edges. The UI now exposes these coverage states instead of presenting empty evidence as proof of absence.
 
 ## Resolved in Production
 
@@ -75,3 +80,4 @@ The workspace now persists evidence-backed same-token co-entry, repeat co-entry,
 - The alert queue now has an embedded always-on consumer and startup recovery pass.
 - Scheduled alert outcome measurement is enabled.
 - Query indexes and CI validation were added.
+- Contract-address analysis, migration `0005`, public holder-RPC fallback, and production dossier verification are deployed.

@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.9] - 2026-08-11
+
+### Added
+
+- Deployed migration `0005` and verified the contract-intelligence worker end to end against a live Solana contract.
+- Added a paced public-RPC holder fallback that resolves real owner wallets and supply without spending Helius historical quota.
+- Added production coverage reporting for holder snapshots, observed buyers, relationship evidence, and unavailable funding paths.
+
+### Fixed
+
+- Preserved partial contract analysis when historical provider capacity is unavailable instead of reporting fabricated empty evidence.
+- Kept seed wallets visible in the relationship map when no relationship edges are inferred.
+- Redacted provider credentials from logs and paused automated wallet backfills while free-provider capacity is reserved for targeted analysis.
+
 ## [0.1.8] - 2026-08-10
 
 ### Added
