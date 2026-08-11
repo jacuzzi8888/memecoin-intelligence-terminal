@@ -173,6 +173,8 @@ export default function ResearchPage() {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/v1/tokens/${address}/analyze`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
       });
       const payload = await response.json() as { success?: boolean; error?: string };
       if (!response.ok || !payload.success) {

@@ -97,6 +97,7 @@ export async function runIndexerService() {
   let shuttingDown = false;
   const walletScheduleMs = parseNumberEnv(process.env.WALLET_SYNC_SCHEDULE_MS, 5 * 60 * 1000);
   const walletStaleAfterMs = parseNumberEnv(process.env.WALLET_SYNC_STALE_AFTER_MS, 30 * 60 * 1000);
+  const walletSyncBatchLimit = parseNumberEnv(process.env.WALLET_SYNC_BATCH_LIMIT, 2);
   const walletDiscoveryScheduleMs = parseNumberEnv(process.env.WALLET_DISCOVERY_SCHEDULE_MS, 15 * 60 * 1000);
   const discoveryScheduleMs = parseNumberEnv(process.env.DISCOVERY_SCHEDULE_MS, 15_000);
   const outcomeScheduleMs = parseNumberEnv(process.env.ALERT_OUTCOME_SCHEDULE_MS, 15 * 60 * 1000);
@@ -224,7 +225,10 @@ export async function runIndexerService() {
 
   if (walletSchedulerEnabled) {
     const runSchedule = async () => {
-      const result = await scheduleTrackedWalletSync({ staleAfterMs: walletStaleAfterMs });
+      const result = await scheduleTrackedWalletSync({
+        staleAfterMs: walletStaleAfterMs,
+        limit: walletSyncBatchLimit,
+      });
       if (result.queued > 0) {
         log.info(result, "Queued stale wallets for background sync");
       }
@@ -281,6 +285,7 @@ export async function runIndexerService() {
     walletSchedulerEnabled,
     walletScheduleMs,
     walletStaleAfterMs,
+    walletSyncBatchLimit,
     walletDiscoveryEnabled,
     walletDiscoveryScheduleMs,
     discoveryEnabled,

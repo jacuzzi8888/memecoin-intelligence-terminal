@@ -94,6 +94,7 @@ async function fetchTokenTransactions(
   tokenAddress: string,
   heliusApiKey: string,
   limit: number,
+  strict = false,
 ): Promise<HeliusEnhancedTransaction[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HELIUS_TIMEOUT_MS);
@@ -109,6 +110,7 @@ async function fetchTokenTransactions(
     });
     if (!response.ok) {
       log.warn({ tokenAddress, status: response.status }, "Token transaction discovery request failed");
+      if (strict) throw new Error(`Token transaction provider unavailable (${response.status})`);
       return [];
     }
 
@@ -116,6 +118,7 @@ async function fetchTokenTransactions(
     return Array.isArray(data) ? data as HeliusEnhancedTransaction[] : [];
   } catch (error) {
     log.warn({ error, tokenAddress }, "Token transaction discovery request errored");
+    if (strict) throw error;
     return [];
   } finally {
     clearTimeout(timeout);
@@ -406,6 +409,7 @@ export async function discoverWalletsForToken(
     options.tokenAddress,
     options.heliusApiKey,
     transactionsPerToken,
+    true,
   );
   const candidates = [...extractWalletCandidates(options.tokenAddress, transactions).values()]
     .filter((candidate) => candidate.score >= minCandidateScore)

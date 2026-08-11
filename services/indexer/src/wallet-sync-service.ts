@@ -77,6 +77,8 @@ export async function scheduleTrackedWalletSync(options?: {
   const staleAfterMs = options?.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
   const limit = options?.limit ?? DEFAULT_SYNC_LIMIT;
   const db = getDb();
+  const inFlightJobs = await createWalletSyncQueue().getJobs(["waiting", "active", "delayed"], 0, -1);
+  const inFlightAddresses = new Set(inFlightJobs.map((job) => job.data.walletAddress));
 
   const wallets = await db.select({
     address: schema.wallets.address,
@@ -89,6 +91,7 @@ export async function scheduleTrackedWalletSync(options?: {
 
   const staleWallets = wallets
     .filter((wallet) => isValidSolanaWalletAddress(wallet.address))
+    .filter((wallet) => !inFlightAddresses.has(wallet.address))
     .filter((wallet) => walletNeedsSync(wallet, staleAfterMs))
     .slice(0, limit);
 
@@ -99,6 +102,7 @@ export async function scheduleTrackedWalletSync(options?: {
   return {
     scanned: wallets.length,
     queued: staleWallets.length,
+    skippedInFlight: inFlightAddresses.size,
   };
 }
 

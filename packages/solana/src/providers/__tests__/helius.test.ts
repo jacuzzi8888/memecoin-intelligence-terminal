@@ -1,8 +1,18 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HeliusProvider } from "../helius";
+import { resetHeliusRequestLimiterForTests } from "../helius-rate-limit";
 
 describe("HeliusProvider.getTokenHolders", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  beforeEach(() => {
+    vi.stubEnv("HELIUS_REQUEST_INTERVAL_MS", "0");
+    resetHeliusRequestLimiterForTests();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    resetHeliusRequestLimiterForTests();
+  });
 
   it("aggregates token accounts by owner and calculates supply percentage", async () => {
     const fetchMock = vi.fn()

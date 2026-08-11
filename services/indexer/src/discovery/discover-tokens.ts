@@ -952,7 +952,17 @@ async function refreshTokenSignal(args: {
     "Fetched market data",
   );
 
-  const holderEvidence = await getHolderEvidence(providers, event.tokenAddress);
+  const holderEnrichmentSetting = process.env.DISCOVERY_ENABLE_HOLDER_ENRICHMENT;
+  const holderEnrichmentEnabled = holderEnrichmentSetting
+    ? holderEnrichmentSetting.toLowerCase() === "true"
+    : process.env.NODE_ENV !== "production";
+  const holderEvidence = holderEnrichmentEnabled
+    ? await getHolderEvidence(providers, event.tokenAddress)
+    : {
+      provider: providers.tokenDiscovery.name,
+      sampledHolders: 0,
+      topHolderConcentrationPct: null,
+    };
   const snapshotAt = new Date();
   const walletEvidence = repository.getTokenWalletEvidence
     ? await repository.getTokenWalletEvidence(event.tokenAddress, snapshotAt)

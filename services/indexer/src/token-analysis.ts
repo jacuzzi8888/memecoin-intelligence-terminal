@@ -381,8 +381,8 @@ export interface TokenAnalysisResult {
   repeatEarlyBuyers: number;
   coverage: {
     holders: "top_20" | "unavailable";
-    buyers: "indexed_and_observed";
-    relationships: "co_entry_and_repeat_deployer";
+    buyers: "indexed_and_observed" | "no_swaps_observed";
+    relationships: "co_entry_and_repeat_deployer" | "no_relationships_observed";
     funding: "unavailable";
   };
 }
@@ -402,6 +402,9 @@ export async function runTokenAnalysisPipeline(tokenAddress: string): Promise<To
     providers.marketData.getMarketData(tokenAddress),
     providers.tokenDiscovery.getTokenHolders(tokenAddress, HOLDER_LIMIT),
   ]);
+  if (holders.length === 0) {
+    throw new Error("Holder evidence is unavailable for this contract");
+  }
   const token = await ensureToken(tokenAddress, tokenInfo, marketData);
   const holderSnapshot = await persistHolderSnapshot(token.id, tokenAddress, holders);
   const walletDiscovery = await discoverWalletsForToken({
@@ -425,8 +428,10 @@ export async function runTokenAnalysisPipeline(tokenAddress: string): Promise<To
     repeatEarlyBuyers: relationships.repeatEarlyBuyers,
     coverage: {
       holders: holderSnapshot.inserted > 0 ? "top_20" : "unavailable",
-      buyers: "indexed_and_observed",
-      relationships: "co_entry_and_repeat_deployer",
+      buyers: walletDiscovery.transactionsFetched > 0 ? "indexed_and_observed" : "no_swaps_observed",
+      relationships: relationships.relationshipsDetected > 0
+        ? "co_entry_and_repeat_deployer"
+        : "no_relationships_observed",
       funding: "unavailable",
     },
   };

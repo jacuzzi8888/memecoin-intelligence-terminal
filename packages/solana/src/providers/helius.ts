@@ -9,6 +9,7 @@ import type {
 } from "../types.js";
 import type { ITokenDiscoveryProvider, IWalletHistoryProvider } from "../interfaces.js";
 import { logger } from "@memecoin/logger";
+import { fetchHelius } from "./helius-rate-limit.js";
 
 const log = logger("helius-provider");
 
@@ -32,7 +33,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
 
   async getNewTokens(since: Date): Promise<TokenEvent[]> {
     try {
-      const response = await fetch(this.rpcUrl, {
+      const response = await fetchHelius(this.rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -59,7 +60,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
         if (sig.blockTime && sig.blockTime * 1000 < since.getTime()) continue;
 
         try {
-          const txResponse = await fetch(this.rpcUrl, {
+          const txResponse = await fetchHelius(this.rpcUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -113,7 +114,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
   async getTokenInfo(address: string): Promise<TokenInfo | null> {
     try {
       const url = `${this.baseUrl}/token-metadata?api-key=${this.apiKey}&mintAccounts=${address}`;
-      const response = await fetch(url);
+      const response = await fetchHelius(url);
       if (!response.ok) return null;
 
       const data = (await response.json()) as any[];
@@ -140,7 +141,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
     try {
       const requestedLimit = Math.max(1, Math.min(limit ?? 20, 20));
       const [largestAccountsResponse, supplyResponse] = await Promise.all([
-        fetch(this.rpcUrl, {
+        fetchHelius(this.rpcUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -150,7 +151,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
             params: [address],
           }),
         }),
-        fetch(this.rpcUrl, {
+        fetchHelius(this.rpcUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -161,7 +162,9 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
           }),
         }),
       ]);
-      if (!largestAccountsResponse.ok || !supplyResponse.ok) return [];
+      if (!largestAccountsResponse.ok || !supplyResponse.ok) {
+        throw new Error(`Holder RPC unavailable (${largestAccountsResponse.status}/${supplyResponse.status})`);
+      }
 
       const largestAccountsPayload = (await largestAccountsResponse.json()) as {
         result?: { value?: Array<{ address?: string; amount?: string; decimals?: number }> };
@@ -174,7 +177,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
         .slice(0, requestedLimit);
       if (largestAccounts.length === 0) return [];
 
-      const ownersResponse = await fetch(this.rpcUrl, {
+      const ownersResponse = await fetchHelius(this.rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -187,7 +190,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
           ],
         }),
       });
-      if (!ownersResponse.ok) return [];
+      if (!ownersResponse.ok) throw new Error(`Holder owner RPC unavailable (${ownersResponse.status})`);
       const ownersPayload = (await ownersResponse.json()) as {
         result?: { value?: Array<{ data?: { parsed?: { info?: { owner?: string } } } } | null> };
       };
@@ -231,7 +234,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
       if (options?.before) params.set("before", options.before);
 
       const url = `${this.baseUrl}/addresses/${address}/transactions?${params}`;
-      const response = await fetch(url);
+      const response = await fetchHelius(url);
       if (!response.ok) return [];
 
       const transactions = (await response.json()) as any[];
@@ -271,7 +274,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
   async getWalletPositions(address: string): Promise<PositionRecord[]> {
     try {
       const url = `${this.baseUrl}/addresses/${address}/balances?api-key=${this.apiKey}`;
-      const response = await fetch(url);
+      const response = await fetchHelius(url);
       if (!response.ok) return [];
 
       const data = (await response.json()) as any;
@@ -317,7 +320,7 @@ export class HeliusProvider implements ITokenDiscoveryProvider, IWalletHistoryPr
   async health(): Promise<ProviderHealth> {
     try {
       const start = Date.now();
-      const response = await fetch(this.rpcUrl, {
+      const response = await fetchHelius(this.rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
